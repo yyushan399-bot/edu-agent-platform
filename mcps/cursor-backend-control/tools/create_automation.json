@@ -1,0 +1,47 @@
+{
+  "name": "create_automation",
+  "description": "Create a Cursor Automation product entry with the current user's authenticated Cursor session. Use only when the user explicitly asks for Cursor Automations. Call only after the user has reviewed the automation draft. Saving shows a compact payload check generated from the serialized request.",
+  "arguments": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "name",
+      "workflow"
+    ],
+    "properties": {
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Display name for the Cursor Automation."
+      },
+      "description": {
+        "type": "string",
+        "description": "Optional short description shown in the Cursor Automations UI."
+      },
+      "workflow": {
+        "type": "object",
+        "description": "Cursor Automation Workflow proto JSON. Include reviewed triggers, actions, prompts, model, git, memory, and workflow options.",
+        "additionalProperties": true
+      },
+      "scope": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          }
+        ],
+        "description": "Optional AutomationScope proto JSON value. Defaults to user scope when omitted."
+      },
+      "templateId": {
+        "type": "string",
+        "description": "Optional template id when creating from a template-like draft."
+      },
+      "teamId": {
+        "type": "integer",
+        "description": "Optional numeric team id for team-scoped creation."
+      }
+    }
+  }
+}

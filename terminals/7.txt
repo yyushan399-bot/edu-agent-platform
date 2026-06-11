@@ -1,0 +1,6 @@
+---
+pid: 41064
+cwd: |
+  C:\Users\35778\Desktop\智能体\preview  agent
+---
+PS C:\Users\35778\Desktop\智能体\preview  agent> 

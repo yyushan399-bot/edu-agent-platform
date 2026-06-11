@@ -1,0 +1,1046 @@
+LlamaIndex(三)：Agent在前面的文章中，我们介绍了如何使用LlamaIndex构建RAG，WorkFlow - 掘金
+
+# LlamaIndex(三)：Agent
+
+用户71128392847
+
+2025-05-27 318 阅读21分钟
+
+在前面的文章中，我们介绍了如何使用LlamaIndex构建RAG，WorkFlow，这篇文章主要介绍LlamaIndex中，如何构建Agent
+
+在LlamaIndex中，Agent可以在LLM的支撑下完成工作流和对应工具的选择，以此来完成相应的任务，任务中的每一步完成时，Agent都会去判断是否要执行下一步，还是返回处理结果。
+
+## 单Agent
+
+### 自定义方法
+
+LlamaIndex提供了一个叫做`FunctionAgent`的工具，它可以自己选择调用什么方法来完成工作
+
+```
+import json
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+from llama_index.llms.openai import OpenAI
+from llama_index.core.agent.workflow import FunctionAgent
+from llama_index.tools.text_to_image import TextToImageToolSpec
+llm =  OpenAI(model='gpt-4o-mini')
+
+text_to_image_tools = TextToImageToolSpec().to_tool_list()
+def perform_web_search(query: str):
+    """用于联网搜索信息"""
+    try:
+        import requests
+
+        headers = {
+            'Content-Type': 'application/json',  # Remove space
+            'Authorization': f'Bearer {os.environ.get("BOCHAAI_SEARCH_API_KEY")}'
+        }
+
+        payload = json.dumps({
+            "query": query,
+            "freshness": "noLimit",
+            "summary": True,
+            "count": 10
+        })
+
+        # 使用搜索API, 参考文档 https://bocha-ai.feishu.cn/wiki/RXEOw02rFiwzGSkd9mUcqoeAnNK
+        response = requests.post("https://api.bochaai.com/v1/web-search", headers=headers, data=payload)
+
+        # Check status code before parsing JSON
+        if response.status_code != 200:
+            return f"搜索失败，状态码: {response.status_code}"
+
+        # Only parse JSON if status code is 200
+        try:
+            json_data = response.json()
+            # print(f"bochaai search response: {json_data}")
+            return str(json_data)
+        except json.JSONDecodeError as e:
+            return f"搜索结果JSON解析失败: {str(e)}"
+
+    except Exception as e:
+        return f"执行网络搜索时出错: {str(e)}"
+
+workflow = FunctionAgent(
+    tools=[perform_web_search],
+    llm=llm,
+    system_prompt="你是一个可以联网搜索信息的agent"
+)
+
+async def main():
+    resp = await workflow.run(user_msg='查询天津市河东区今天的天气')
+    print(resp)
+
+if __name__ == '__main__':
+    import asyncio
+    asyncio.run(main())
+
+```
+
+输出：
+
+```
+今天（5月24日），天津市河东区的天气情况如下：
+
+- **天气**：晴间多云
+- **最高气温**：28°C
+- **最低气温**：15°C
+- **风速**：微风，风力约3-4级
+
+预计未来几天，天气将持续晴朗，气温逐渐升高，适合户外活动，但紫外线较强，外出时请注意防晒和补水。
+
+如果需要更详细的信息，可以查看相关天气网站或应用。
+
+```
+
+### 第三方工具
+
+在 LlamaHub上也可以找到很多第三方的工具
+
+这里我们简单的使用一个数据库工具做演示
+
+```
+ pip install llama-index-tools-database
+
+```
+
+```
+from dotenv import load_dotenv
+from llama_index.tools.database import DatabaseToolSpec
+from llama_index.core.agent.workflow import FunctionAgent
+from llama_index.agent.openai import OpenAIAgent
+import pymysql
+
+from llama_index.llms.openai import OpenAI
+load_dotenv()
+pymysql.install_as_MySQLdb()
+db_tools = DatabaseToolSpec(
+    scheme="mysql",  # Database Scheme
+    host="localhost",  # Database Host
+    port="3306",  # Database Port
+    user="root",  # Database User
+    password="123456",  # Database Password
+    dbname="wmsbase",  # Database Name
+)
+db_tools = db_tools.to_tool_list()
+llm =  OpenAI(model='gpt-4o')
+agent = FunctionAgent(
+    tools=db_tools,
+    llm=llm,
+    system_prompt='你是一名资深DBA，能够根据需要选择合适和工具操作数据库'
+)
+
+async def main():
+    resp = await agent.run(user_msg='查询哪些表里是有数据的，并以json结构输出这些表的全部数据')
+    print(resp)
+
+if __name__ == '__main__':
+    import asyncio
+    asyncio.run(main())
+
+```
+
+输出 以下是数据库中有数据的表及其全部数据：
+
+```
+以下是数据库中有数据的表及其数据：
+
+{
+    "alembic_version": {
+        "data": [
+            "f7abe18909a4"
+        ],
+        "data_num": 1
+    },
+    "s_seq": {
+        "data": [
+            "1, default, NDk0ZGEzZjEyOGFlNmY2OTg4MzgyMGZiYmE0OTA3ZGE2Yjc1NTg3YjBlMzc2NWFiNWQ2ZGZjNmM4NjRhYzYwZQ==, CD03210B-3765-4519-87DF-195C9C491D1B, , default, , , , , , 0, , 1, , admin, , 2025-02-12 20:06:06, 2025-02-12 20:06:06"
+        ],
+        "data_num": 1
+    },
+    "u_user": {
+        "data": [
+            "1, admin0, ece6a5da0855d9d0561f7c5dc4a1b7846c0c198ed268b8deb05f5e7b65333676, monitor, YTc1MzA0MTBmN2ZjYWVhNzQyZWFlOWNjZjhkNDUzYWEzMjVmMWQwOTZhODkwN2ExM2M4OWU5M2QzNTNhZjVmMw==, , , , 超级管理员, , , , , , , on, admin,manager,normal, finance,stock,boss,manager, m_inv,m_finance,m_system,m_inv_stockin, None, , , , , , , , , , default, , , default, , 2025-02-12 20:06:06, 2025-02-12 20:16:25",
+            "2, admin, ece6a5da0855d9d0561f7c5dc4a1b7846c0c198ed268b8deb05f5e7b65333676, monitor, YzlkZTM3NzdkNDYwZWJkNWRkNmU1ZmViYWVkNjdiOWQxNmRiMWQzNDZiZjVhNTkwNGI0MjQ5NDc3MmM3MTAxOQ==, , , , 管理员, , , , , , , on, manager,normal, finance,stock,boss,manager, , None, , , , , , , , , , , , , default, , 2025-02-12 20:06:06, 2025-02-12 20:06:06"
+        ],
+        "data_num": 2
+    }
+}
+
+这些表分别是 `alembic_version`、`s_seq` 和 `u_user`。
+
+```
+
+可以看到，还是可以拿到比较准确的结果的，但是上面的操作有一个问题，就是我们看不到中间的步骤，不知道Agent做了哪些操作，也没有流式输出。LlamaIndex也提供了相应的工具，能够完成流式输出，让我们查看中间的执行过程
+
+### 流式输出与事件
+
+#### 流式输出
+
+在之前的代码中，我们都是使用`await workflow.run()`来等待任务结果，下面我们换一种方式，使用
+
+```
+from llama_index.core.agent.workflow import AgentStream
+
+```
+
+如果我们不使用await关键字，`workflow.run()`会返回一个异步迭代器，我们只需要迭代它，就可以获取到想要的事件 AgentStream
+
+下面我们使用一个第三方工具 Tavily,这个工具是收费的，不过也是提供了一定的免费额度
+
+```
+pip install llama-index-tools-tavily-research
+
+```
+
+```
+from dotenv import load_dotenv
+load_dotenv()
+
+from llama_index.llms.openai import OpenAI
+from llama_index.core.agent.workflow import AgentWorkflow
+from llama_index.core.workflow import Context
+from llama_index.tools.tavily_research import TavilyToolSpec
+import os
+from llama_index.core.agent.workflow import AgentStream
+
+llm = OpenAI(model="gpt-4o-mini")
+
+tavily_tool = TavilyToolSpec( api_key=os.getenv("TAVILY_API_KEY") )
+
+workflow = AgentWorkflow.from_tools_or_functions(
+    tavily_tool.to_tool_list(),
+    llm=llm,
+    system_prompt="你是一个能够帮助人们在互联网上搜索信息的助手."
+)
+
+async def main():
+    handler = workflow.run(user_msg="今天COMEX黄金价格")
+    async for event in handler.stream_events():
+        if isinstance(event, AgentStream):
+            print(event.delta, end="", flush=True)
+    # handle streaming output
+    # async for event in handler.stream_events():
+    #     if isinstance(event, AgentStream):
+    #         print(event.delta, end="", flush=True)
+    #     elif isinstance(event, AgentInput):
+    #         print('='*20,'AgentInput','='*20)
+    #         print("Agent 输入: ", event.input)  # the current input messages
+    #         print("Agent 名称:", event.current_agent_name)  # the current agent name
+    #     elif isinstance(event, AgentOutput):
+    #         print('=' * 20, 'AgentOutput', '=' * 20)
+    #         print("Agent 输出: ", event.response)  # the current full response
+    #         print("工具调用: ", event.tool_calls)  # the selected tool calls, if any
+    #         print("LLM响应: ", event.raw)  # the raw llm api response
+    #     elif isinstance(event, ToolCallResult):
+    #         print('=' * 20, 'ToolCallResult', '=' * 20)
+    #         print("工具调用: ", event.tool_name)  # the tool name
+    #         print("工具参数: ", event.tool_kwargs)  # the tool kwargs
+    #         print("工具输出: ", event.tool_output)  # the tool output
+    # print('=' * 20, '最终结果', '=' * 20)
+    # print final output
+    # print(str(await handler))
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
+
+```
+
+输出：
+
+```
+今天COMEX黄金的价格如下：
+
+- 当前价格：3148.90美元
+- 今日开盘：3180.80美元
+- 今日最高：3195.60美元
+- 昨日收盘：3180.70美元
+- 今日最低：3123.30美元
+- 当前变动：-31.80美元 (-1.00%)
+
+更多详细信息可以查看 [这里](https://www.quheqihuo.com/quote/comex-usqijin.html)。
+
+```
+
+`AgentStream`可以让我们流式输出运行结果
+
+#### 事件输出
+
+LlamaIndex也提供了一些事件可以让我们看到执行过程
+
+- `ToolCallResult`：工具调用的结果
+- `ToolCall`：调用了哪些工具以及使用了哪些参数
+- `AgentOutput`：来自代理的响应
+- `AgentInput`：开始代理执行的完整消息对象
+
+```
+from dotenv import load_dotenv
+load_dotenv()
+
+from llama_index.llms.openai import OpenAI
+from llama_index.core.agent.workflow import AgentWorkflow, AgentInput, AgentOutput, ToolCallResult, ToolCall
+from llama_index.core.workflow import Context
+from llama_index.tools.tavily_research import TavilyToolSpec
+import os
+from llama_index.core.agent.workflow import AgentStream
+
+llm = OpenAI(model="gpt-4o-mini")
+
+tavily_tool = TavilyToolSpec( api_key=os.getenv("TAVILY_API_KEY") )
+
+workflow = AgentWorkflow.from_tools_or_functions(
+    tavily_tool.to_tool_list(),
+    llm=llm,
+    system_prompt="你是一个能够帮助人们在互联网上搜索信息的助手."
+)
+
+async def main():
+    handler = workflow.run(user_msg="今天COMEX黄金价格")
+
+    async for event in handler.stream_events():
+        if isinstance(event, AgentStream):
+            print(event.delta, end="", flush=True)
+        elif isinstance(event, AgentInput):
+            print('='*20,'AgentInput','='*20)
+            print("AgentInput input: ", event.input)  # the current input messages
+            print("AgentInput current_agent_name:", event.current_agent_name)  # the current agent name
+        elif isinstance(event, AgentOutput):
+            print('=' * 20, 'AgentOutput', '=' * 20)
+            print("AgentOutput response: ", event.response)  # the current full response
+            print("AgentOutput tool_calls: ", event.tool_calls)  # the selected tool calls, if any
+            print("AgentOutput raw: ", event.raw)  # the raw llm api response
+        elif isinstance(event, ToolCall):
+            print('=' * 20, 'ToolCall', '=' * 20)
+            print("ToolCall tool_name: ",event.tool_name)
+            print("ToolCall tool_kwargs: ",event.tool_kwargs)
+        elif isinstance(event, ToolCallResult):
+            print('=' * 20, 'ToolCallResult', '=' * 20)
+            print("ToolCallResult.tool_name: ", event.tool_name)  # the tool name
+            print("ToolCallResult.tool_kwargs: ", event.tool_kwargs)  # the tool kwargs
+            print("ToolCallResult.tool_output: ", event.tool_output)  # the tool output
+    print('=' * 20, '最终结果', '=' * 20)
+    print(str(await handler))
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
+
+```
+
+输出：
+
+```
+==================== AgentInput ====================
+AgentInput input:  [ChatMessage(role=<MessageRole.SYSTEM: 'system', additional_kwargs={}, blocks=[TextBlock(block_type='text', text='你是一个能够帮助人们在互联网上搜索信息的助手.')]), ChatMessage(role=<MessageRole.USER: 'user', additional_kwargs={}, blocks=[TextBlock(block_type='text', text='今天COMEX黄金价格')])]
+AgentInput current_agent_name: Agent
+==================== AgentOutput ====================
+AgentOutput response:  assistant: None
+AgentOutput tool_calls:  [ToolSelection(tool_id='call_OA7f1bU4qyrwPfUCjmSIE5Fk', tool_name='search', tool_kwargs={'query': 'COMEX黄金价格', 'max_results': 1})]
+AgentOutput raw:  {'id': 'chatcmpl-Bahxy2FY51fHj7PDpvqBwNwaeJJ5H', 'choices': [{'delta': {'content': None, 'function_call': None, 'refusal': None, 'role': None, 'tool_calls': None}, 'finish_reason': 'tool_calls', 'index': 0, 'logprobs': None, 'content_filter_results': {}}], 'created': 1748088514, 'model': 'gpt-4o-mini-2024-07-18', 'object': 'chat.completion.chunk', 'service_tier': None, 'system_fingerprint': 'fp_7a53abb7a2', 'usage': None}
+==================== ToolCall ====================
+ToolCall tool_name:  search
+ToolCall tool_kwargs:  {'query': 'COMEX黄金价格', 'max_results': 1}
+==================== ToolCall ====================
+ToolCall tool_name:  search
+ToolCall tool_kwargs:  {'query': 'COMEX黄金价格', 'max_results': 1}
+==================== AgentInput ====================
+AgentInput input:  [ChatMessage(role=<MessageRole.SYSTEM: 'system', additional_kwargs={}, blocks=[TextBlock(block_type='text', text='你是一个能够帮助人们在互联网上搜索信息的助手.')]), ChatMessage(role=<MessageRole.USER: 'user', additional_kwargs={}, blocks=[TextBlock(block_type='text', text='今天COMEX黄金价格')]), ChatMessage(role=<MessageRole.ASSISTANT: 'assistant', additional_kwargs={'tool_calls': [ChoiceDeltaToolCall(index=0, id='call_OA7f1bU4qyrwPfUCjmSIE5Fk', function=ChoiceDeltaToolCallFunction(arguments='{"query":"COMEX黄金价格","max_results":1}', name='search'), type='function')]}, blocks=[TextBlock(block_type='text', text='')]), ChatMessage(role=<MessageRole.TOOL: 'tool', additional_kwargs={'tool_call_id': 'call_OA7f1bU4qyrwPfUCjmSIE5Fk'}, blocks=[TextBlock(block_type='text', text="[Document(id_='77ce0917-b4cf-4dc8-b560-477076562d0f', embedding=None, metadata={'url': 'https://www.cmegroup.com/cn-t/markets/metals/precious/gold.html'}, excluded_embed_metadata_keys=[], excluded_llm_metadata_keys=[], relationships={}, metadata_template='{key}: {value}', metadata_separator='\\n', text_resource=MediaResource(embeddings=None, data=None, text='COMEX黃金 ; 最後. 3357.7 ; 變化. +62.7 (+1.90%) ; 成交量. 238,139 ; CODE: GCVL ; CVOL: 22.4612.', path=None, url=None, mimetype=None), image_resource=None, audio_resource=None, video_resource=None, text_template='{metadata_str}\\n\\n{content}')]")])]
+AgentInput current_agent_name: Agent
+今天COMEX黄金的价格为3357.7美元，变动为+62.7美元（+1.90%），成交量为238,139。有关更多信息，可以访问[CME集团](https://www.cmegroup.com/cn-t/markets/metals/precious/gold.html)。==================== AgentOutput ====================
+AgentOutput response:  assistant: 今天COMEX黄金的价格为3357.7美元，变动为+62.7美元（+1.90%），成交量为238,139。有关更多信息，可以访问[CME集团](https://www.cmegroup.com/cn-t/markets/metals/precious/gold.html)。
+AgentOutput tool_calls:  []
+AgentOutput raw:  {'id': 'chatcmpl-Bahy3kVGWzglnaPOurzazKISHB7rm', 'choices': [{'delta': {'content': None, 'function_call': None, 'refusal': None, 'role': None, 'tool_calls': None}, 'finish_reason': 'stop', 'index': 0, 'logprobs': None, 'content_filter_results': {}}], 'created': 1748088519, 'model': 'gpt-4o-mini-2024-07-18', 'object': 'chat.completion.chunk', 'service_tier': None, 'system_fingerprint': 'fp_7a53abb7a2', 'usage': None}
+==================== 最终结果 ====================
+今天COMEX黄金的价格为3357.7美元，变动为+62.7美元（+1.90%），成交量为238,139。有关更多信息，可以访问[CME集团](https://www.cmegroup.com/cn-t/markets/metals/precious/gold.html)。
+
+```
+
+好了，现在我们构建了简单的Agent，然后能够进行流式输出结果，输出执行过程，但是有一个很关键的问题，就是全程不可控，如果我们想在过程中加入人工干预怎么办？
+
+#### 人工干预
+
+在一些风险较大的任务中，比如支付，数据库操作，配置变更，通常只让机器自己去执行操作还是会有很大的危险性，这个时候我们可以发出一个任何步骤都没有接收到的事件，然后告知工具等待回复，根据回复判断下一步如何进行。
+
+LlamaIndex内置了两个事件，`InputRequiredEvent`，`HumanResponseEvent`来完成这个操作
+
+```
+from dotenv import load_dotenv
+load_dotenv()
+
+from llama_index.llms.openai import OpenAI
+from llama_index.core.agent.workflow import AgentWorkflow
+from llama_index.core.workflow import InputRequiredEvent,HumanResponseEvent,Context
+
+llm = OpenAI(model="gpt-4o-mini")
+
+# a tool that performs a dangerous task
+async def dangerous_task(ctx: Context) - str:
+    """A dangerous task that requires human confirmation."""
+
+    # emit an event to the external stream to be captured
+    ctx.write_event_to_stream(
+        InputRequiredEvent(
+            prefix="Are you sure you want to proceed? ",
+            user_name="Laurie",
+        )
+    )
+
+    # wait until we see a HumanResponseEvent
+    response = await ctx.wait_for_event(
+        HumanResponseEvent, requirements={"user_name": "Laurie"}
+    )
+
+    # act on the input from the event
+    if response.response.strip().lower() == "yes":
+        return "Dangerous task completed successfully."
+    else:
+        return "Dangerous task aborted."
+
+workflow = AgentWorkflow.from_tools_or_functions(
+    [dangerous_task],
+    llm=llm,
+    system_prompt="You are a helpful assistant that can perform dangerous tasks.",
+)
+async def main():
+    handler = workflow.run(user_msg="I want to proceed with the dangerous task.")
+
+    async for event in handler.stream_events():
+        # capture InputRequiredEvent
+        if isinstance(event, InputRequiredEvent):
+            # capture keyboard input
+            response = input(event.prefix)
+            # send our response back
+            handler.ctx.send_event(
+                HumanResponseEvent(
+                    response=response,
+                    user_name=event.user_name,
+                )
+            )
+
+    response = await handler
+    print(str(response))
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
+
+```
+
+输出
+
+```
+Are you sure you want to proceed? yes
+The dangerous task has been completed successfully. If you need anything else, feel free to ask!
+
+```
+
+## 多Agent
+
+上面我们介绍了Agent的简单使用方法，不过都是一个agent在进行工作，如果我们想使用多个agent协作解决任务怎么办，LlamaIndex也支持多代理的构建，下面让我们以生成代码为例，来看一下多agent是如何协作的
+
+现在我们需要编写一个代码自动生成智能体，要求实现以下功能
+
+1. 如果符合需求文档，则根据生成的代码，写入对应类型的文件，将需求文档写入Readme
+2. 对生成的代码进行review，看是否符合需求文档，不符合则重新生成
+3. 根据需求文档生成代码
+4. 根据用户输入进行扩展，编写需求文档
+
+在这个需求中，我们一共需要四个智能体互相协作：
+
+- `FileWriterAgent`用于将代码和需求文档写入文件
+- `CodeReviewerAgent`用于review生成好的代码是否符合需求文档
+- `CodeWriterAgent`用于根据需求文档实现代码,根据review结果修改代码
+- `RequirementsAnalysisAgent`用于扩展用户需求并编写需求文档
+
+### 编写工具
+
+首先，我们编写每个智能体所需要调用的工具
+
+```
+async def requirements_analyzer(ctx:Context = None,user_message:str = '') - str:
+    """用于识别用户需求并进行更清晰的描述"""
+    user_prompt = """
+    # 角色
+    你是一名资深软件设计师
+    # 任务
+    根据用户给出的信息，进一步细化需求并给出设计文档，设计文档需要包含以下内容：
+    1. 需求详细说明
+    2. 功能说明
+    3. 技术架构说明
+    4. 实现语言
+    设计文档以markdown形式输出
+    
+    # 用户需求
+    {user_message}
+    """
+    prompt_tmpl = ChatPromptTemplate([ChatMessage(role=MessageRole.USER,content=user_prompt)])
+    prompt_info = prompt_tmpl.format(user_message=user_message)
+
+    resp = llm.complete(prompt_info)
+    current_state = await ctx.get("state")
+    current_state.update({'doc':resp.text})
+    await ctx.set('state',current_state)
+    return '已根据用户描述分析需求并生成文档'
+
+async def file_writer(ctx:Context = None) - str:
+    """用于将生成好的的代码写入文件"""
+    user_prompt = """
+    你需要更具代码内容生成文件名，以json结构返回
+    # 示例:
+    ```json
+    {
+        'file_name':'example.py'
+    }
+    ```
+ # 代码
+ {code}
+ 
+ """
+ current_state = await ctx.get("state")
+ code = current_state.get('code')
+ doc = current_state.get('doc')
+ prompt_tmpl = ChatPromptTemplate([ChatMessage(role=MessageRole.USER,content=user_prompt)])
+ prompt_info = prompt_tmpl.format(code=code)
+ resp = llm.complete(prompt_info)
+ res_json = resp.text.strip('```json').strip('```')
+ doc = doc.strip('```markdown').strip('```')
+ filename_dict = json.loads(res_json)
+ file_name = filename_dict.get('file_name')
+ if os.path.exists(file_name):
+ os.remove(file_name)
+ with open(file_name,'w',encoding='utf-8') as f:
+ f.write(code.strip('```python').strip('```'))
+
+ with open("Readme.md",'w',encoding='utf-8') as f:
+ f.write(doc)
+ return f'代码已写入文件:{file_name} 文档已写入文件:Readme.md'
+
+async def code_writer(ctx: Context) - str:
+ """用于根据用户需求实现代码"""
+ current_state = await ctx.get("state")
+ doc = current_state.get('doc')
+ is_pass = current_state.get('is_pass')
+ is_review = current_state.get('is_review')
+ if is_review:
+ if not is_pass:
+ review_msg = current_state.get('review_msg')
+ last_version_code = current_state.get('last_version_code')
+ else:
+ review_msg = '代码通过审核'
+ last_version_code = ""
+ else:
+ review_msg = ''
+ last_version_code = ""
+ user_prompt = """
+ # 角色
+ 你是一名资深软件工程师
+ # 任务
+ 根据需求文档实现功能，如果有修改意见，则根据修改意见修改已实现的代码，如果没有修改意见，表示代码还没有编写过，直接编写代码即可,代码编写完成后无需输出代码说明，无需确认是否需要修改
+ 
+ # 需求文档
+ {doc}
+ # 修改意见
+ {review_msg}
+ # 已实现代码
+ {last_version_code}
+ """
+
+ prompt_tmpl = ChatPromptTemplate([ChatMessage(role=MessageRole.USER,content=user_prompt)])
+ prompt_info = prompt_tmpl.format(doc=doc,review_msg=review_msg,last_version_code=last_version_code)
+ resp = llm.complete(prompt_info)
+ current_state.update({'code':resp.text})
+ await ctx.set('state',current_state)
+ return '已根据需求实现代码'
+
+async def code_reviewer(ctx:Context = None) - str:
+ """根据需求文档对代码进行review"""
+ current_state = await ctx.get("state")
+ code = current_state.get('code')
+ doc = current_state.get('doc')
+ # code = 'import os'
+ # doc = '导入os包'
+ user_prompt = """
+ # 角色
+ 你是一名资深python工程师
+ # 任务
+ 根据需求文档对代码进行review，如果，代码需要修改，给出修改意见和是否需要修改的标记,以json结构返回
+ 
+ # 示例
+ {
+ 'is_pass':true,
+ 'review_msg':'当前代码不符合文档中的需求'
+ }
+ # 需求文档
+ {doc}
+ # 已实现代码
+ {code}
+ """
+ prompt_tmpl = ChatPromptTemplate([ChatMessage(role=MessageRole.USER,content=user_prompt)])
+ prompt_info = prompt_tmpl.format(doc=doc,code=code)
+ resp = llm.complete(prompt_info)
+ res_json = resp.text.strip('```json').strip('```')
+ review_res = json.loads(res_json)
+ is_pass = review_res.get('is_pass')
+ review_msg = review_res.get('review_msg')
+ if not is_pass:
+ print('review_msg:',review_msg)
+ current_state.update(
+ {
+ 'review_msg':review_msg,
+ 'is_pass':is_pass,
+ 'is_review':True
+ }
+ )
+ await ctx.set('state',current_state)
+ if not is_pass:
+ return '代码审核完成,需重新生成'
+ return '代码审核完成,审核通过'
+
+```
+
+### 创建智能体
+
+这里我们使用`FunctionAgent`创建,`FunctionAgent`有以下几个属性需要注意
+
+- `can_handoff_to`可以调用的工具，指当前智能体有哪些工具可以调用
+- `system_prompt`系统提示词，定义当前智能体会有哪些行为，比如:执行...动作,然后移交控制权给....
+- `description`智能体描述，智能体通过描述来寻找下一步需要将控制权移交给谁
+- `name`智能体名称，这个名称是给智能体看的，告诉其他智能体我是谁
+
+```
+requirements_analysis_agent = FunctionAgent(
+ name='RequirementsAnalysisAgent',
+ description="用于根据用户输入，生成需求文档",
+ system_prompt = """
+ 你是RequirementsAnalysisAgent，用于将用户输入的信息细化为需求文档，一旦需求文档完成将控制权交给CodeWriterAgent,以便使用代码实现需求
+ """,
+ llm=llm,
+ tools=[requirements_analyzer],
+ can_handoff_to=["CodeWriterAgent"]
+)
+file_writer_agent = FunctionAgent(
+ name='FileWriterAgent',
+ description='用于将生成好的代码写入文件',
+ tools=[file_writer],
+ system_prompt = """你是FileWriterAgent,你需要根据生成好的代码生成文件名，然后根据文件名创建文件，之后将生成好的代码写入文件,无需移交控制权，写入文件后终止流程"""
+)
+
+code_writer_agent = FunctionAgent(
+ name='CodeWriterAgent',
+ description="根据需求文档，生成python代码",
+ system_prompt = """
+ 你是CodeWriterAgent，根据RequirementsAnalysisAgent输出的文档实现代码，或者根据CodeReviewer给出的修改意见调整代码实现，
+ 当代码实现完毕,将控制权移交给CodeReviewer,以便对代码实现是否符合需求进行检查
+ """,
+ llm=llm,
+ tools=[code_writer],
+ can_handoff_to=["CodeReviewerAgent"]
+)
+
+code_reviewer_agent = FunctionAgent(
+ name='CodeReviewerAgent',
+ description="根据需求文档，检查CodeWriterAgent编写的代码",
+ system_prompt = """
+ 你是CodeReviewerAgent，根据需求文档检查代码，检查完毕之后，输出代码是否需要修改及修改意见，将控制权移交给CodeWriterAgent，
+ 当代码无需修改时，将控制权移交给FileWriterAgent，以便将生成好的代码写入文件
+ """,
+ llm=llm,
+ tools=[code_reviewer],
+ can_handoff_to=["CodeWriterAgent","FileWriterAgent"]
+)
+
+```
+
+### 运行
+
+```
+agent_workflow = AgentWorkflow(
+ agents=[requirements_analysis_agent,file_writer_agent,code_writer_agent, code_reviewer_agent],
+ root_agent=requirements_analysis_agent.name,
+ initial_state={
+ 'review_msg':'',
+ 'is_pass':None,
+ 'is_review':None,
+ 'code':'',
+ 'doc':'',
+ 'last_version_code':'',
+ }
+
+)
+
+async def main():
+ handler = agent_workflow.run(
+ user_msg='请使用golang实现一个简单计算器，支持加减乘除运算'
+ )
+ current_agent = None
+ current_tool_calls = ""
+ async for event in handler.stream_events():
+ if (
+ hasattr(event, "current_agent_name")
+ and event.current_agent_name != current_agent
+ ):
+ current_agent = event.current_agent_name
+ print(f"\n{'='*50}")
+ print(f"🤖 Agent: {current_agent}")
+ print(f"{'='*50}\n")
+ elif isinstance(event, AgentOutput):
+ if event.response.content:
+ print("📤 Output:", event.response.content)
+ if event.tool_calls:
+ print(
+ "🛠️ Planning to use tools:",
+ [call.tool_name for call in event.tool_calls],
+ )
+ elif isinstance(event, ToolCallResult):
+ print(f"🔧 Tool Result ({event.tool_name}):")
+ print(f" Arguments: {event.tool_kwargs}")
+ print(f" Output: {event.tool_output}")
+ elif isinstance(event, ToolCall):
+ print(f"🔨 Calling Tool: {event.tool_name}")
+ print(f" With arguments: {event.tool_kwargs}")
+if __name__ == '__main__':
+ asyncio.run(main())
+
+```
+
+输出:
+
+```
+==================================================
+🤖 Agent: RequirementsAnalysisAgent
+==================================================
+
+🛠️ Planning to use tools: ['requirements_analyzer']
+🔨 Calling Tool: requirements_analyzer
+ With arguments: {'user_message': '请使用html实现一个简单计算器，支持加减乘除运算'}
+🔧 Tool Result (requirements_analyzer):
+ Arguments: {'user_message': '请使用html实现一个简单计算器，支持加减乘除运算'}
+ Output: 已根据用户描述分析需求并生成文档
+🛠️ Planning to use tools: ['handoff']
+🔨 Calling Tool: handoff
+ With arguments: {'reason': '需求文档已完成，交给CodeWriterAgent生成代码。', 'to_agent': 'CodeWriterAgent'}
+🔧 Tool Result (handoff):
+ Arguments: {'reason': '需求文档已完成，交给CodeWriterAgent生成代码。', 'to_agent': 'CodeWriterAgent'}
+ Output: Agent CodeWriterAgent is now handling the request due to the following reason: 需求文档已完成，交给CodeWriterAgent生成代码。.
+Please continue with the current request.
+
+==================================================
+🤖 Agent: CodeWriterAgent
+==================================================
+
+🛠️ Planning to use tools: ['code_writer']
+🔨 Calling Tool: code_writer
+ With arguments: {}
+🔧 Tool Result (code_writer):
+ Arguments: {}
+ Output: 已根据需求实现代码
+🛠️ Planning to use tools: ['handoff']
+🔨 Calling Tool: handoff
+ With arguments: {'reason': '代码实现完毕，交给CodeReviewerAgent进行检查。', 'to_agent': 'CodeReviewerAgent'}
+🔧 Tool Result (handoff):
+ Arguments: {'reason': '代码实现完毕，交给CodeReviewerAgent进行检查。', 'to_agent': 'CodeReviewerAgent'}
+ Output: Agent CodeReviewerAgent is now handling the request due to the following reason: 代码实现完毕，交给CodeReviewerAgent进行检查。.
+Please continue with the current request.
+
+==================================================
+🤖 Agent: CodeReviewerAgent
+==================================================
+
+🛠️ Planning to use tools: ['code_reviewer']
+🔨 Calling Tool: code_reviewer
+ With arguments: {}
+🔧 Tool Result (code_reviewer):
+ Arguments: {}
+ Output: 代码审核完成,审核通过
+🛠️ Planning to use tools: ['handoff']
+🔨 Calling Tool: handoff
+ With arguments: {'reason': '代码审核通过，无需修改，交给FileWriterAgent写入文件。', 'to_agent': 'FileWriterAgent'}
+🔧 Tool Result (handoff):
+ Arguments: {'reason': '代码审核通过，无需修改，交给FileWriterAgent写入文件。', 'to_agent': 'FileWriterAgent'}
+ Output: Agent FileWriterAgent is now handling the request due to the following reason: 代码审核通过，无需修改，交给FileWriterAgent写入文件。.
+Please continue with the current request.
+
+==================================================
+🤖 Agent: FileWriterAgent
+==================================================
+
+🛠️ Planning to use tools: ['file_writer']
+🔨 Calling Tool: file_writer
+ With arguments: {}
+🔧 Tool Result (file_writer):
+ Arguments: {}
+ Output: 代码已写入文件:calculator.go 文档已写入文件:Readme.md
+📤 Output: 已根据生成好的代码生成文件名，然后根据文件名创建文件，之后将生成好的代码写入文件。流程已终止。
+
+```
+
+生成的代码及需求文档:
+
+### 完整代码
+
+```
+import asyncio
+import json
+
+from llama_index.core.workflow import Context
+from llama_index.core.llms import ChatMessage,MessageRole
+from llama_index.llms.openai import OpenAI
+from llama_index.tools.tavily_research import TavilyToolSpec
+import os
+from llama_index.core.agent.workflow import FunctionAgent, AgentWorkflow, AgentOutput, ToolCallResult, ToolCall, \
+ AgentStream
+import dotenv
+from llama_index.core.prompts import ChatPromptTemplate
+dotenv.load_dotenv()
+llm = OpenAI(model='gpt-4o-mini')
+
+async def requirements_analyzer(ctx:Context = None,user_message:str = '') - str:
+ """用于识别用户需求并进行更清晰的描述"""
+ user_prompt = """
+ # 角色
+ 你是一名资深软件设计师
+ # 任务
+ 根据用户给出的信息，进一步细化需求并给出设计文档，设计文档需要包含以下内容：
+ 1. 需求详细说明
+ 2. 功能说明
+ 3. 技术架构说明
+ 4. 实现语言
+ 设计文档以markdown形式输出
+ 
+ # 用户需求
+ {user_message}
+ """
+ prompt_tmpl = ChatPromptTemplate([ChatMessage(role=MessageRole.USER,content=user_prompt)])
+ prompt_info = prompt_tmpl.format(user_message=user_message)
+
+ stream_handle = llm.stream_complete(prompt_info)
+ context = ""
+ for stream in stream_handle:
+ print(stream.delta,end='',flush=True)
+ context += stream.delta
+ current_state = await ctx.get("state")
+ current_state.update({'doc':context})
+ await ctx.set('state',current_state)
+ return '已根据用户描述分析需求并生成文档'
+
+async def file_writer(ctx:Context = None) - str:
+ """用于将生成好的的代码写入文件"""
+ user_prompt = """
+ 你需要更具代码内容生成文件名，以json结构返回
+ # 示例:
+    ```json
+    {
+        'file_name':'example.py'
+        'lang':'python'
+    }
+    ```
+ # 代码
+ {code}
+ 
+ """
+ current_state = await ctx.get("state")
+ code = current_state.get('code')
+ doc = current_state.get('doc')
+ prompt_tmpl = ChatPromptTemplate([ChatMessage(role=MessageRole.USER,content=user_prompt)])
+ prompt_info = prompt_tmpl.format(code=code)
+ stream_handle = llm.stream_complete(prompt_info)
+ context = ""
+ for stream in stream_handle:
+ print(stream.delta,end='',flush=True)
+ context += stream.delta
+ res_json = context.strip('```json').strip('```')
+ doc = doc.strip('```markdown').strip('```')
+ filename_dict = json.loads(res_json)
+ file_name = filename_dict.get('file_name')
+ lang = filename_dict.get('lang')
+ if os.path.exists(file_name):
+ os.remove(file_name)
+ with open(file_name,'w',encoding='utf-8') as f:
+ f.write(code.strip(f'```{lang}').strip('```'))
+
+ with open("Readme.md",'w',encoding='utf-8') as f:
+ f.write(doc)
+ return f'代码已写入文件:{file_name} 文档已写入文件:Readme.md'
+
+async def code_writer(ctx: Context) - str:
+ """用于根据用户需求实现代码"""
+ current_state = await ctx.get("state")
+ doc = current_state.get('doc')
+ is_pass = current_state.get('is_pass')
+ is_review = current_state.get('is_review')
+ if is_review:
+ if not is_pass:
+ review_msg = current_state.get('review_msg')
+ last_version_code = current_state.get('code')
+ else:
+ review_msg = '代码通过审核'
+ last_version_code = ""
+ else:
+ review_msg = ''
+ last_version_code = ""
+ user_prompt = """
+ # 角色
+ 你是一名资深软件工程师
+ # 任务
+ 根据需求文档实现功能，如果有修改意见，则根据修改意见修改已实现的代码，如果没有修改意见，表示代码还没有编写过，直接编写代码即可,代码编写完成后无需输出代码说明，无需确认是否需要修改
+ 
+ # 需求文档
+ {doc}
+ # 修改意见
+ {review_msg}
+ # 已实现代码
+ {last_version_code}
+ """
+
+ prompt_tmpl = ChatPromptTemplate([ChatMessage(role=MessageRole.USER,content=user_prompt)])
+ prompt_info = prompt_tmpl.format(doc=doc,review_msg=review_msg,last_version_code=last_version_code)
+ stream_handle = llm.stream_complete(prompt_info)
+ context = ""
+ for stream in stream_handle:
+ print(stream.delta,end='',flush=True)
+ context += stream.delta
+ current_state.update({'code':context})
+ await ctx.set('state',current_state)
+ return '已根据需求实现代码'
+
+async def code_reviewer(ctx:Context = None) - str:
+ """根据需求文档对代码进行review"""
+ current_state = await ctx.get("state")
+ code = current_state.get('code')
+ doc = current_state.get('doc')
+ # code = 'import os'
+ # doc = '导入os包'
+ user_prompt = """
+ # 角色
+ 你是一名资深python工程师
+ # 任务
+ 根据需求文档对代码进行review，如果，代码需要修改，给出修改意见和是否需要修改的标记,以json结构返回
+ 
+ # 示例
+ {
+ 'is_pass':true,
+ 'review_msg':'当前代码不符合文档中的需求'
+ }
+ # 需求文档
+ {doc}
+ # 已实现代码
+ {code}
+ """
+ prompt_tmpl = ChatPromptTemplate([ChatMessage(role=MessageRole.USER,content=user_prompt)])
+ prompt_info = prompt_tmpl.format(doc=doc,code=code)
+ stream_handle = llm.stream_complete(prompt_info)
+ context = ""
+ for stream in stream_handle:
+ print(stream.delta,end='',flush=True)
+ context += stream.delta
+ res_json = context.strip('```json').strip('```')
+ review_res = json.loads(res_json)
+ is_pass = review_res.get('is_pass')
+ review_msg = review_res.get('review_msg')
+ if not is_pass:
+ print('review_msg:',review_msg)
+ current_state.update(
+ {
+ 'review_msg':review_msg,
+ 'is_pass':is_pass,
+ 'is_review':True
+ }
+ )
+ await ctx.set('state',current_state)
+ if not is_pass:
+ return '代码审核完成,需重新生成'
+ return '代码审核完成,审核通过'
+
+requirements_analysis_agent = FunctionAgent(
+ name='RequirementsAnalysisAgent',
+ description="用于根据用户输入，生成需求文档",
+ system_prompt = """
+ 你是RequirementsAnalysisAgent，用于将用户输入的信息细化为需求文档，一旦需求文档完成将控制权交给CodeWriterAgent,以便使用代码实现需求
+ """,
+ llm=llm,
+ tools=[requirements_analyzer],
+ can_handoff_to=["CodeWriterAgent"]
+)
+file_writer_agent = FunctionAgent(
+ name='FileWriterAgent',
+ description='用于将生成好的代码写入文件',
+ tools=[file_writer],
+ system_prompt = """你是FileWriterAgent,你需要根据生成好的代码生成文件名，然后根据文件名创建文件，之后将生成好的代码写入文件,无需移交控制权，写入文件后终止流程"""
+)
+
+code_writer_agent = FunctionAgent(
+ name='CodeWriterAgent',
+ description="根据需求文档，生成python代码",
+ system_prompt = """
+ 你是CodeWriterAgent，根据RequirementsAnalysisAgent输出的文档实现代码，或者根据CodeReviewerAgent给出的修改意见调整代码实现，
+ 当代码实现完毕,将控制权移交给CodeReviewerAgent,以便对代码实现是否符合需求进行检查
+ """,
+ llm=llm,
+ tools=[code_writer],
+ can_handoff_to=["CodeReviewerAgent"]
+)
+
+code_reviewer_agent = FunctionAgent(
+ name='CodeReviewerAgent',
+ description="根据需求文档，检查CodeWriterAgent编写的代码",
+ system_prompt = """
+ 你是CodeReviewerAgent，根据需求文档检查代码，检查完毕之后，输出代码是否需要修改及修改意见，将控制权移交给CodeWriterAgent，当代码无需修改时，将控制权移交给FileWriterAgent，以便将生成好的代码写入文件
+ """,
+ llm=llm,
+ tools=[code_reviewer],
+ can_handoff_to=["CodeWriterAgent","FileWriterAgent"]
+)
+
+agent_workflow = AgentWorkflow(
+ agents=[requirements_analysis_agent,file_writer_agent,code_writer_agent, code_reviewer_agent],
+ root_agent=requirements_analysis_agent.name,
+ initial_state={
+ 'review_msg':'',
+ 'is_pass':None,
+ 'is_review':None,
+ 'code':'',
+ 'doc':'',
+ 'last_version_code':'',
+ }
+
+)
+
+async def main():
+ handler = agent_workflow.run(
+ user_msg='请使用golang实现一个简单计算器，支持加减乘除运算'
+ )
+ current_agent = None
+ current_tool_calls = ""
+ async for event in handler.stream_events():
+ if (
+ hasattr(event, "current_agent_name")
+ and event.current_agent_name != current_agent
+ ):
+ current_agent = event.current_agent_name
+ print(f"\n{'='*50}")
+ print(f"🤖 Agent: {current_agent}")
+ print(f"{'='*50}\n")
+ elif isinstance(event, AgentOutput):
+ if event.response.content:
+ print("📤 Output:", event.response.content)
+ if event.tool_calls:
+ print(
+ "🛠️ Planning to use tools:",
+ [call.tool_name for call in event.tool_calls],
+ )
+ elif isinstance(event, ToolCallResult):
+ print(f"🔧 Tool Result ({event.tool_name}):")
+ print(f" Arguments: {event.tool_kwargs}")
+ print(f" Output: {event.tool_output}")
+ elif isinstance(event, ToolCall):
+ print(f"🔨 Calling Tool: {event.tool_name}")
+ print(f" With arguments: {event.tool_kwargs}")
+if __name__ == '__main__':
+ asyncio.run(main())
+
+```
+
+关于智能体，llamaindex中还有很多有意思的用法，以及重要的组件，比如 Memory等，具体可以参考官方文档(不写了，东西太多了根本写不完！！！！)

@@ -1,0 +1,307 @@
+【实战教程】用博查Web Search API构建定制化搜索引擎：从零到一打造专属搜索工具！-CSDN博客
+# 【实战教程】用博查Web Search API构建定制化搜索引擎：从零到一打造专属搜索工具！
+最新推荐文章于2025-06-23 18:02:12发布
+原创最新推荐文章于2025-06-23 18:02:12发布·1.1k 阅读·![](https://csdnimg.cn/release/blogv2/dist/pc/img/newHeart2023Active.png)![](https://csdnimg.cn/release/blogv2/dist/pc/img/newHeart2023Black.png)31
+·![](https://csdnimg.cn/release/blogv2/dist/pc/img/tobarCollect2.png)![](https://csdnimg.cn/release/blogv2/dist/pc/img/tobarCollectionActive2.png)25·
+CC 4.0 BY-SA版权
+版权声明：本文为博主原创文章，遵循[CC 4.0 BY-SA](http://creativecommons.org/licenses/by-sa/4.0/)版权协议，转载请附上原文出处链接和本声明。
+文章标签：[#前端](https://so.csdn.net/so/search/s.do?q=前端&t=all&o=vip&s=&l=&f=&viparticle=&from_tracking_code=tag_word&from_code=app_blog_art)[#搜索引擎](https://so.csdn.net/so/search/s.do?q=搜索引擎&t=all&o=vip&s=&l=&f=&viparticle=&from_tracking_code=tag_word&from_code=app_blog_art)[#人工智能](https://so.csdn.net/so/search/s.do?q=人工智能&t=all&o=vip&s=&l=&f=&viparticle=&from_tracking_code=tag_word&from_code=app_blog_art)[#python](https://so.csdn.net/so/search/s.do?q=python&t=all&o=vip&s=&l=&f=&viparticle=&from_tracking_code=tag_word&from_code=app_blog_art)[#语言模型](https://so.csdn.net/so/search/s.do?q=语言模型&t=all&o=vip&s=&l=&f=&viparticle=&from_tracking_code=tag_word&from_code=app_blog_art)[#自然语言处理](https://so.csdn.net/so/search/s.do?q=自然语言处理&t=all&o=vip&s=&l=&f=&viparticle=&from_tracking_code=tag_word&from_code=app_blog_art)[#全文检索](https://so.csdn.net/so/search/s.do?q=全文检索&t=all&o=vip&s=&l=&f=&viparticle=&from_tracking_code=tag_word&from_code=app_blog_art)
+> **> 想拥有一个专属的搜索引擎？比如只搜索技术文档、医疗报告或最新行业资讯？本文将手把手教你用Python+博查Web Search API，50行代码实现一个可定制化搜索引擎！
+**
+> ## 引言：为什么需要定制化搜索引擎？
+想象以下场景：
+* **程序员小明**想快速查找某开源框架的报错解决方案，但百度结果中总掺杂广告和过时博客
+* **医学研究员李教授**需要精准获取最新的癌症治疗论文，但通用搜索引擎返回大量无关内容
+**痛点**：通用搜索缺乏垂直领域优化！
+**解决方案**：基于博查Web Search API，开发一个**可定制过滤、排序、高亮**的搜索引擎！
+## 一、项目目标与核心功能### 1.1 项目目标* **精准搜索**：根据用户需求过滤无关结果
+* **灵活展示**：支持分页、高亮、排序（如按时间/相关性）
+* **快速开发**：无需爬虫，直接调用API### 1.2 功能清单|**功能**|**实现方式**|
+关键词搜索|调用博查Web Search API|
+结果过滤|按时间范围、网站域名筛选|
+高亮显示|关键词标红|
+分页展示|前端动态加载|
+## 二、前期准备：API与环境配置
+### 2.1 获取博查API Key
+1. 访问[博查AI开放平台](https://open.bochaai.com)→ 注册账号2. 进入**API Key管理**→ 创建密钥（形如`sk-xxxxxx`）#### 2.2 安装依赖库```
+`pipinstallrequests flask python-dotenv`
+```
+* `requests`：发送HTTP请求
+* `flask`：搭建简易Web界面
+* `python-dotenv`：管理环境变量
+### 三、API集成：搜索与数据解析
+#### 3.1 调用Web Search API
+```
+`importrequestsimportjsondefsearch\_web(query:str,api\_key:str,max\_results=50)->list:"""调用博查API获取搜索结果"""url="https://api.bochaai.com/v1/web-search"headers={"Authorization":f"Bearer{api\_key}"}payload={"query":query,"count":max\_results,"summary":True# 开启摘要}try:response=requests.post(url,headers=headers,json=payload)response.raise\_for\_status()data=response.json()returndata["data"]["webPages"]["value"]exceptExceptionase:print(f"搜索失败：{str(e)}")return[]`
+```
+**参数说明**：
+* `count`&#xff1a&#xff1a;控制返回结果数量&#xff08&#xff08;1\~50&#xff09&#xff09;
+* `summary=True`：获取更详细的文本摘要
+#### 3.2 数据解析与高亮```
+`defhighlight\_keywords(text:str,keywords:list)->str:"""关键词高亮（支持多个关键词）"""forwordinkeywords:text=text.replace(word,f'<span style="color:red;">{word}</span>')returntext# 示例：解析并高亮结果raw\_results=search\_web("深度学习框架对比","sk-你的密钥")processed=[{"title":highlight\_keywords(item["name"],["深度学习"]),"url":item["url"],"snippet":highlight\_keywords(item["snippet"],["框架"]),"date":item["dateLastCrawled"][:10]# 提取日期}foriteminraw\_results]`
+```
+### 四、定制化功能实现#### 4.1 按时间过滤```
+`deffilter\_by\_date(results:list,start\_date:str)->list:"""过滤指定日期后的结果（日期格式：YYYY-MM-DD）"""return[itemforiteminresultsifitem["date"]>=start\_date]# 示例：仅保留2024年后的结果filtered\_results=filter\_by\_date(processed,"2024-01-01")`
+```
+#### 4.2 按域名屏蔽```
+`BLACKLIST\_DOMAINS=["baidu.com","weibo.com"]# 自定义黑名单deffilter\_blacklist(results:list)->list:"""屏蔽指定域名的结果"""return[itemforiteminresultsifnotany(domaininitem["url"]fordomaininBLACKLIST\_DOMAINS)]`
+```
+### 五、前端界面开发（Flask实现）
+#### 5.1 HTML模板（`templates/index.html`）
+```
+`<!DOCTYPEhtml><html><head><title>定制搜索引擎</title><style>.result{border:1px solid #ddd;padding:15px;margin:10px;}.highlight{font-weight:bold;color:#ff4d4d;}</style></head><body><h1>自定义搜索</h1><formaction="/search"><inputtype="text"name="q"placeholder="输入关键词..."><buttontype="submit">搜索</button></form>{% for item in results %}<divclass="result"><h3>{{ item.title|safe }}</h3><ahref="{{ item.url }}"target="\_blank">{{ item.url }}</a><p>{{ item.snippet|safe }}</p><small>收录时间：{{ item.date }}</small></div>{% endfor %}</body></html>`
+```
+#### 5.2 Flask后端逻辑
+```
+`fromflaskimportFlask,render\_template,requestfromdotenvimportload\_dotenvimportos
+load\_dotenv()app=Flask(\_\_name\_\_)API\_KEY=os.getenv(""BOCHA\_API\_KEY"")# 从.env文件读取密钥@app.route('/')defindex():returnrender\_template('index.html',results=[])@app.route('/search')defsearch():query=request.args.get('q','')raw\_results=search\_web(query,API\_KEY)processed=[{"title":highlight\_keywords(item["name"],[query]),"url":item["url"],"snippet":highlight\_keywords(item["snippet"],[query]),"date":item["dateLastCrawled"][:10]}foriteminraw\_results]filtered=filter\_blacklist(processed)returnrender\_template('index.html',results=filtered)if\_\_name\_\_==''\_\_main\_\_'':app.run(debug=True)`
+```
+### 六、项目实战与优化#### **运行效果**
+1. 创建`.env`文件存储API密钥：
+```
+`BOCHA\_API\_KEY==sk-你的密钥`
+```
+2. 启动服务：
+```
+`python app.py`
+```
+3. 访问`http://localhost:5000`，搜索“Python教程”：
+![效果截图](https://i-blog.csdnimg.cn/direct/369ea4aa8715498a845ac75153249760.png#pic_center)
+## 七、完整项目代码### 注意事项：
+* 代码文件命名为**app.py**
+* 在**app.py**所在的工作目录下新建一个文件夹：**templates**
+* 在**templates**文件夹中新建**html**文件**index.html**，并复制**5.1节**中的代码
+* 在**app.py**所在的工作目录下新建**.env**文件，然后在里面写入：**BOCHA\_API\_KEY == “sk-你的密钥”**
+* 最后运行**app.py**，打开`http://localhost:5000`，即可访问！
+```
+`fromflaskimportFlask,render\_template,requestfromdotenvimportload\_dotenvimportosimportrequestsimportjson
+BLACKLIST\_DOMAINS=["baidu.com","weibo.com"]# 自定义黑名单deffilter\_blacklist(results:list)->list:"""屏蔽指定域名的结果"""return[itemforiteminresultsifnotany(domaininitem["url"]fordomaininBLACKLIST\_DOMAINS)]deffilter\_by\_date(results:list,start\_date:str)->list:"""过滤指定日期后的结果（日期格式：YYYY-MM-DD）"""return[itemforiteminresultsifitem["date"]>=start\_date]defhighlight\_keywords(text:str,keywords:list)->str:"""关键词高亮（支持多个关键词）"""forwordinkeywords:text=text.replace(word,f'<span style="color:red;">{word}</span>')returntextdefsearch\_web(query:str,api\_key:str,max\_results=50)->list:"""调用博查API获取搜索结果"""url="https://api.bochaai.com/v1/web-search"headers={"Authorization":f"Bearer{api\_key}"}payload={"query":query,"count":max\_results,"summary":True# 开启摘要}try:response=requests.post(url,headers=headers,json=payload)response.raise\_for\_status()data=response.json()returndata["data"]["webPages"]["value"]exceptExceptionase:print(f"搜索失败：{str(e)}")return[]load\_dotenv()app=Flask(\_\_name\_\_)API\_KEY=os.getenv(""BOCHA\_API\_KEY"")# 从.env文件读取密钥@app.route('/')defindex():returnrender\_template('index.html',results=[])@app.route('/search')defsearch():query=request.args.get('q','')raw\_results=search\_web(query,API\_KEY)processed=[{"title":highlight\_keywords(item["name"],[query]),"url":item["url"],"snippet":highlight\_keywords(item["snippet"],[query]),"date":item["dateLastCrawled"][:10]}foriteminraw\_results]filtered=filter\_blacklist(processed)returnrender\_template('index.html',results=filtered)if\_\_name\_\_==''\_\_main\_\_'':app.run(debug=True)`
+```
+## 总结通过集成博查**Web Search API**，你实现了
+* **快速获取结构化数据，避免爬虫开发**，
+同时还可以在本项目的基础上集成* **语义排序（Semantic Reranker）、多模态搜索**等更多功能，
+* 用**NLP模型识别同义词**（如“AI”高亮“人工智能”）等，
+**赶快自己动手实践一下吧！**
+**立即行动：**
+前往[博查AI开放平台](https://open.bochaai.com/)领取API Key
+查看往期教程👇，构建完整RAG应用链
+**🔗 系列文章推荐：**
+[《用Python玩转博查Web Search API》](https://blog.csdn.net/Alexinyu/article/details/146242079)
+[《Semantic Reranker API：搜索结果智能排序》](https://blog.csdn.net/Alexinyu/article/details/146316826)
+[《Dify+博查API：零代码搭建RAG应用》](https://blog.csdn.net/Alexinyu/article/details/146349264?spm=1001.2014.3001.5501)
+让AI告别“古董知识库”，拥抱实时智能新时代！🚀
+![](https://csdnimg.cn/release/blogv2/dist/pc/img/vip-limited-close-newWhite.png)
+确定要放弃本次机会？福利倒计时*:**:*
+![](https://csdnimg.cn/release/blogv2/dist/pc/img/vip-limited-close-roup.png)立减 ¥普通VIP年卡可用
+[立即使用](https://mall.csdn.net/vip)
+[![](https://profile-avatar.csdnimg.cn/default.jpg!1)BigNorthBear](https://blog.csdn.net/Alexinyu)
+[关注](javascript:;)关注
+* ![](https://csdnimg.cn/release/blogv2/dist/pc/img/tobarThumbUpactive.png)![](https://csdnimg.cn/release/blogv2/dist/pc/img/toolbar/like-active.png)![](https://csdnimg.cn/release/blogv2/dist/pc/img/toolbar/like.png)31
+点赞* ![](https://csdnimg.cn/release/blogv2/dist/pc/img/toolbar/unlike-active.png)![](https://csdnimg.cn/release/blogv2/dist/pc/img/toolbar/unlike.png)
+踩* [![](https://csdnimg.cn/release/blogv2/dist/pc/img/toolbar/collect-active.png)![](https://csdnimg.cn/release/blogv2/dist/pc/img/toolbar/collect.png)![](https://csdnimg.cn/release/blogv2/dist/pc/img/newCollectActive.png)25](javascript:;)
+收藏觉得还不错?一键收藏![](https://csdnimg.cn/release/blogv2/dist/pc/img/collectionCloseWhite.png)
+* ![](https://csdnimg.cn/release/blogv2/dist/pc/img/guideRedReward01.png)知道了
+[![](https://csdnimg.cn/release/blogv2/dist/pc/img/toolbar/comment.png)0](#commentBox)
+评论* [![](https://csdnimg.cn/release/blogv2/dist/pc/img/toolbar/share.png)分享](javascript:;)
+复制链接分享到QQ
+分享到新浪微博![](https://csdnimg.cn/release/blogv2/dist/pc/img/share/icon-wechat.png)扫一扫
+* ![](https://csdnimg.cn/release/blogv2/dist/pc/img/toolbar/more.png)
+![](https://csdnimg.cn/release/blogv2/dist/pc/img/toolbar/report.png)举报
+![](https://csdnimg.cn/release/blogv2/dist/pc/img/toolbar/report.png)举报
+[
+AI大模型探索之路-*实战*篇：智能*化*IT领域*搜索引擎*的*构建*与初步实践
+](https://xundaomalu.blog.csdn.net/article/details/139605522)
+[寻道AI，探索AI无限可能！](https://blog.csdn.net/xiaobing259)
+06-12![](https://csdnimg.cn/release/blogv2/dist/pc/img/readCountWhite.png)5524
+[
+在信息技术飞速发展的当下，对于专业知识的检索需求正呈现出前所未有的增长态势。为了应对这*一*挑战，本文将深入探讨如何巧妙地结合大型*语言模型*的功能调用能力与谷歌*搜索引擎**API*的强大功能，共同*打造**一*个专门针对IT领域的智能在线*搜索*平台。这个平台不仅能够为用户提供更为精准、高效的*搜索*结果，还将引领信息技术检索的新潮流，为专业人士带来更加便捷、智能的*搜索*体验。
+](https://xundaomalu.blog.csdn.net/article/details/139605522)
+[
+【2025跑通的AI变现玩法之二十四】【从技术搭建到垂直场景：GPT套壳网站的*实战*全攻略】
+](https://wukong.blog.csdn.net/article/details/147378039)
+[商务合作|问题讨论|交流学习 请联系作者微信，加微信请务必注明来意，博客主页有联系方式](https://blog.csdn.net/shaoyezhangliwei)
+04-21![](https://csdnimg.cn/release/blogv2/dist/pc/img/readCountWhite.png)628
+[
+1. 成功案例拆解案例1：Monica.im（AI浏览器插件）核心策略聚焦欧美市场，避开国内大厂竞争。收购独立开发者产品“ChatGPT for Google”，快速获取300万用户。多模型动态调用（GPT-4/Claude 3/Gemini），提升综合能力。数据表现总用户数超700万，月活用户200万+。2024年营收突破5000万美元，利润率达45%。案例2：丰台区AI法律顾问技术亮点与百度法行宝合作，整合8类高频法律问题知识库。
+](https://wukong.blog.csdn.net/article/details/147378039)
+参与评论您还未登录，请先登录后发表或查看评论[
+Bocha*Web**Search**API*：使用Langchain的Agent模式通过Tool Use调用*博**查**Search**API*实现LLMs联网*搜索*
+](https://blog.csdn.net/cxk19980802/article/details/142978730)
+[cxk19980802的博客](https://blog.csdn.net/cxk19980802)
+10-16![](https://csdnimg.cn/release/blogv2/dist/pc/img/readCountWhite.png)1346
+[
+本篇讲述如何通过LangChain 的Function Call 调用*博**查**Web**Search**API*来实现LLM的联网*搜索*。主要用到 LangChain 的Agent 模式的Tool Use 能力，来调用Bocha*Web**Search**API*。
+](https://blog.csdn.net/cxk19980802/article/details/142978730)
+[
+Bocha*Web**Search**API*：国内可用的Serp*API*，可以平替Bing*Web**Search**API*，Google*Web**Search**API*
+](https://devpress.csdn.net/v1/article/detail/142979103)
+[cxk19980802的博客](https://blog.csdn.net/cxk19980802)
+10-16![](https://csdnimg.cn/release/blogv2/dist/pc/img/readCountWhite.png)6189
+[
+在AI对话、AI*搜索*、AI智能体等AI应用的开发过程中，均需要引入联网*搜索**API*来提供实时信息来增强检索并且降低大模型的幻觉。国内*博**查*，为AI应用提供内容合规、价格实惠、更适合AI使用的*搜索*服务，数据来源和*搜索*结果符合国内安全规范，数据不出海，满足国内企业用户和开发者的应用场景。Bing*Search**API*、Google*Search**API*这类 Serp*API*均是海外服务，*一*方面会有国内用户数据出海的问题，另*一*方面*搜索*结果中的内容没有进行安全过滤，所以国内业务是不能使用这些海外的*搜索*服务的。
+](https://devpress.csdn.net/v1/article/detail/142979103)
+[
+手把手教你使用C#创建*一*个*Web**Search*Agent
+](https://blog.csdn.net/sD7O95O/article/details/148020785)
+[dotNET跨平台](https://blog.csdn.net/sD7O95O)
+05-16![](https://csdnimg.cn/release/blogv2/dist/pc/img/readCountWhite.png)50
+[
+最近我对PocketFlow比较感兴趣，不仅是因为它是*一*个极简的LLM框架，更加让我觉得很不错的地方在于作者提供了很多方便学习的例子，就算没有LLM应用开发经验，也可以快速上手。在PocketFlowSharp项目中，我希望可以做到足够的新手友好，提供*一*些只要简单配置即可跑起来的示例，并且每个示例是独立的。在经过简单的配置之后，应该已经能够跑通了，为了让感兴趣的人更好的学习，我这里来介绍*一*下具体的实现。，这也没有办法，开发者更关注的是代码实现，文档写起来确实也很费劲。
+](https://blog.csdn.net/sD7O95O/article/details/148020785)
+[
+使用*博**查**Web**Search**API*获取*搜索引擎*的网页链接和文本摘要，给AI/RAG应用增加联网*搜索*功能，可平替Bing*Search**API*、Google*Search**API*，国内稳定可用。
+](https://devpress.csdn.net/v1/article/detail/142914215)
+[cxk19980802的博客](https://blog.csdn.net/cxk19980802)
+10-14![](https://csdnimg.cn/release/blogv2/dist/pc/img/readCountWhite.png)3474
+[
+可以看到提供*Web**Search**API*、AI*Search**API*、Agent*Search**API*接口，分别提供近百亿网页内容*搜索*、大厂生态内容*搜索*、专业领域内容*搜索*，我们本篇只使用*Web**Search**API*即可。整体试了下，响应速度、*搜索*结果质量都相当不错，符合作者AI Agent应用场景的需求。
+](https://devpress.csdn.net/v1/article/detail/142914215)
+[
+*Web**Search**API*，*搜索引擎**API*使用入门
+](https://blog.csdn.net/cxk19980802/article/details/143196712)
+[cxk19980802的博客](https://blog.csdn.net/cxk19980802)
+10-23![](https://csdnimg.cn/release/blogv2/dist/pc/img/readCountWhite.png)1034
+[
+*Web**Search**API*是*一*种互联网网页*搜索**API*接口，允许开发者通过编程访问*博**查**搜索引擎*的*搜索*结果和相关信息，实现在应用程序或网站中集成*搜索*功能。
+](https://blog.csdn.net/cxk19980802/article/details/143196712)
+[
+用于企业AI*搜索*的Bocha*Web**Search**API*，给LLM提供联网*搜索*能力和长文本上下文
+](https://devpress.csdn.net/v1/article/detail/143098590)
+[cxk19980802的博客](https://blog.csdn.net/cxk19980802)
+10-20![](https://csdnimg.cn/release/blogv2/dist/pc/img/readCountWhite.png)929
+[
+Bocha*Web**Search**API*是由*博**查*提供的企业级互联网网页*搜索**API*接口，允许开发者通过编程访问*博**查**搜索引擎*的*搜索*结果和相关信息，实现在应用程序或网站中集成*搜索*功能。该*API*支持近亿级网页内容*搜索*，适用于各类AI应用、RAG应用和AI Agent智能体的开发，解决数据安全、价格高昂和内容合规等问题。通过注册*博**查*开发者账户、获取*API*KEY并调用*API*，开发者可以轻松集成*搜索*功能。
+](https://devpress.csdn.net/v1/article/detail/143098590)
+[
+【wmpChrome插件个性*化**定制*】：*打造*符合你需求的*专属*插件
+](https://wenku.csdn.net/column/wq6dzjty68)
+[
+[【wmpChrome插件个性*化**定制*】：*打造*符合你需求的*专属*插件](https*:*//extensionworkshop.com/assets/img/documentation/develop/locate\_background\_script.a82ee879.png) # 摘要本文详尽介绍了wmpChrome插件的开发...
+](https://wenku.csdn.net/column/wq6dzjty68)
+[
+ComMonitor*定制*开发手册：*打造**专属*调试软件
+](https://wenku.csdn.net/column/15jqna7vf3)
+[
+[ComMonitor*定制*开发手册：*打造**专属*调试软件](https*:*//hackaday.com/wp-content/uploads/2016/06/async-comm-diagram.jpg) # 摘要本文对ComMonitor的*定制*开发进行了全面的概述，深入分析了其基础架构，包括系统...
+](https://wenku.csdn.net/column/15jqna7vf3)
+[
+开发者必备：Trae 代码生成平台进阶指南｜10 分钟*构建*完整*Web*应用
+最新发布](https://deep-learning.blog.csdn.net/article/details/148851578)
+[专注于人工智能、软件开发、工控自动化、工厂数字化及智能化等领域，希望和大家共同进步！](https://blog.csdn.net/weixin_39815573)
+06-23![](https://csdnimg.cn/release/blogv2/dist/pc/img/readCountWhite.png)773
+[
+摘要：Trae 作为新*一*代智能代码生成平台，通过动态模板引擎与 AST 抽象语法树解析技术，实现从需求描述到可运行*Web*应用的快速转换。本文系统讲解 Trae 在*Web*开发中的进阶应用，涵盖核心原理、模板*定制*、多技术栈适配等关键内容。通过 Vue3+Spring Boot*实战*案例，演示如何在 10 分钟内生成包含用户管理、权限控制的完整*Web*应用，包含数据库设计、前后端接口、可视*化*页面的全流程代码生成。
+](https://deep-learning.blog.csdn.net/article/details/148851578)
+[
+Google*Web**Search**API*(Deprecated)
+](https://blog.csdn.net/hack8/article/details/6598717)
+[瞎几把学](https://blog.csdn.net/hack8)
+07-11![](https://csdnimg.cn/release/blogv2/dist/pc/img/readCountWhite.png)4155
+[
+Class ReferenceNote*:*The Google*Web**Search**API*has been officially deprecated as of November 1, 2010. It will continue to work as per our de
+](https://blog.csdn.net/hack8/article/details/6598717)
+[
+*Web**Search**API*（2025年2月）全网成本最低的接口实现方式
+](https://blog.csdn.net/xujianflying/article/details/145850797)
+[小for学习栏](https://blog.csdn.net/xujianflying)
+02-25![](https://csdnimg.cn/release/blogv2/dist/pc/img/readCountWhite.png)897
+[
+本文详细解析了*Web**Search**API*的实现方式，该接口不仅在数据实时性上满足各类应用需求，更在成本控制上展现出显著优势。通过对接口背景、功能设计、参数解析、返回数据格式、定价策略及市场对比的介绍，希望能为开发者提供*一*份实用的技术参考，助力在实际项目中低成本、高效率地获取互联网数据。
+](https://blog.csdn.net/xujianflying/article/details/145850797)
+[
+【手把手教学】用*博**查**Web**Search**API*实现多模态*搜索*：*打造**专属*于你的*搜索引擎*！
+](https://devpress.csdn.net/v1/article/detail/146982490)
+[Alexinyu的博客](https://blog.csdn.net/Alexinyu)
+04-03![](https://csdnimg.cn/release/blogv2/dist/pc/img/readCountWhite.png)1358
+[
+大家好啊，我是北极熊。手把手教学系列也是好久没有更新了，其实在《轻松认识RAG》系列中带大家完整的实现过*一*个RAG系统，不过我在翻阅我前面文章的时候，发现在使用*博**查**API*时，都是用的它返回的文字部分，但其实，*博**查**API*是可以实现多模态*搜索*的啊！今天就手把手的带大家使用*博**查*的*Web**Search**API**打造**一*个*专属*于你的*搜索引擎*！
+](https://devpress.csdn.net/v1/article/detail/146982490)
+[
+*博**查**Search**API*获取，实现联网(无需魔法)
+](https://devpress.csdn.net/v1/article/detail/143026239)
+[cxk19980802的博客](https://blog.csdn.net/cxk19980802)
+10-17![](https://csdnimg.cn/release/blogv2/dist/pc/img/readCountWhite.png)2984
+[
+在*博**查*官方申请可联网的*搜索**API*，这个是*一*个国内有备案的产品，国内稳定可用，无需魔法。
+](https://devpress.csdn.net/v1/article/detail/143026239)
+[
+[探索*Search**Api*：轻松实现*Web**搜索*自动*化*]
+](https://blog.csdn.net/stjklkjhgffxw/article/details/142677391)
+[stjklkjhgffxw的博客](https://blog.csdn.net/stjklkjhgffxw)
+10-02![](https://csdnimg.cn/release/blogv2/dist/pc/img/readCountWhite.png)488
+[
+*Search**Api*允许您根据需求*定制**查*询。*Search**Api*提供了*一*个强大且灵活的接口，用于实现*Web*数据的自动*化*检索。结合LangChain，您可以实现复杂的*搜索*逻辑，为应用提供更丰富的数据支持。
+](https://blog.csdn.net/stjklkjhgffxw/article/details/142677391)
+[
+Elastic*Search*之*search**API*
+](https://dongyunqi.blog.csdn.net/article/details/136078494)
+[wang0907的博客](https://blog.csdn.net/wang0907)
+02-08![](https://csdnimg.cn/release/blogv2/dist/pc/img/readCountWhite.png)1817
+[
+本文看下*查*询相关内容，这也是我们在实际工作中接触的最多的，所以有必要好好学习下！
+](https://dongyunqi.blog.csdn.net/article/details/136078494)
+[
+4款顶级*搜索引擎**API*，*构建*AI应用必备的*搜索*服务
+](https://blog.csdn.net/cxk19980802/article/details/144929266)
+[cxk19980802的博客](https://blog.csdn.net/cxk19980802)
+01-04![](https://csdnimg.cn/release/blogv2/dist/pc/img/readCountWhite.png)2359
+[
+每款*Web**搜索**API*都有其独特的优势和适用场景，开发者在选择时应根据自身项目的需求、预算、技术栈以及目标市场来做出决定。如果您的应用侧重于国内业务的中文网页*搜索*，包括AI智能体、语义理解或者内容合规，*博**查**API*可能是*一*个很好的选择；如果需要强大的全球*搜索*支持，Bing和Google的*API*将是不错的选择；而Exa.ai则适合需要高度*定制*和行业特定优*化*的AI应用。
+](https://blog.csdn.net/cxk19980802/article/details/144929266)
+[
+【手把手教学】用*Python*玩转*博**查*AI*Web**Search**API*！全网*搜索**一*键搞定！
+](https://devpress.csdn.net/v1/article/detail/146242079)
+[Alexinyu的博客](https://blog.csdn.net/Alexinyu)
+03-14![](https://csdnimg.cn/release/blogv2/dist/pc/img/readCountWhite.png)2291
+[
+随着*人工智能*（AI）的发展，人们也在生活中接触到各种各样的大模型，比如今年爆火的DeepSeek，或是开启大模型元年的ChatGPT。但是在使用的过程中，我们会发现，大模型是有知识库的，而且知识库的截止时间往往很早，我们无法从大模型中获取到*一*些时效性很强的内容，比如说我想知道今天的天气，大模型就无法回答，或者是回答*一*些乱七八糟的内容，也就是大模型幻觉。
+](https://devpress.csdn.net/v1/article/detail/146242079)
+[![](https://profile-avatar.csdnimg.cn/default.jpg!1)[![](https://csdnimg.cn/release/blogv2/dist/mobile/img/vipIcon.png)](https://blog.csdn.net/Alexinyu)](https://blog.csdn.net/Alexinyu)
+[BigNorthBear](https://blog.csdn.net/Alexinyu)
+博客等级![](https://csdnimg.cn/identity/blog4.png)
+码龄5年
+[30原创](https://blog.csdn.net/Alexinyu)708点赞583收藏324粉丝
+关注[私信](https://im.csdn.net/chat/Alexinyu)
+[![](https://i-operation.csdnimg.cn/images/f70cbe190d3c4f25901cb03b6971f64d.png)](https://ai.csdn.net/homework?utm_source=2048390893)
+[![](https://i-operation.csdnimg.cn/images/bfc20af708654cc689adbb6361f6dc98.png)](https://mpbeta.csdn.net/edit?utm_source=blog)
+### 热门文章* [【手把手教学】用Python玩转博查AI Web Search API！全网搜索一键搞定！![](https://csdnimg.cn/release/blogv2/dist/pc/img/readCountWhite.png)2291](https://blog.csdn.net/Alexinyu/article/details/146242079)
+* [【手把手教学】在Dify上集成博查Web Search API实现RAG！搭建你的第一个RAG！![](https://csdnimg.cn/release/blogv2/dist/pc/img/readCountWhite.png)1863](https://blog.csdn.net/Alexinyu/article/details/146349264)
+* [【硬核科普】为什么大模型需要联网搜索？探索AI时代的“实时外挂”，附博查AI一键接入方案![](https://csdnimg.cn/release/blogv2/dist/pc/img/readCountWhite.png)1487](https://blog.csdn.net/Alexinyu/article/details/146379900)
+* [走向多模态AI之路（一）：什么是多模态 AI？![](https://csdnimg.cn/release/blogv2/dist/pc/img/readCountWhite.png)1372](https://blog.csdn.net/Alexinyu/article/details/146985388)
+* [【手把手教学】用博查Web Search API实现多模态搜索：打造专属于你的搜索引擎！![](https://csdnimg.cn/release/blogv2/dist/pc/img/readCountWhite.png)1358](https://blog.csdn.net/Alexinyu/article/details/146982490)
+上一篇：[【极简实战】用博查AI Search + Python+DeepSeek打造你的私有知识库！无需Elasticsearch，三步搞定RAG！](https://blog.csdn.net/Alexinyu/article/details/146484461)下一篇：[【硬核实战】用博查AI Search API打造智能问答系统：多模态+流式响应，让AI“会思考”！](https://blog.csdn.net/Alexinyu/article/details/146507397)
+### 最新文章* [走向多模态AI之路（三）：多模态 AI 的挑战与未来](https://blog.csdn.net/Alexinyu/article/details/146988361)
+* [走向多模态AI之路（二）：多模态 AI 如何工作？](https://blog.csdn.net/Alexinyu/article/details/146987299)
+* [走向多模态AI之路（一）：什么是多模态 AI？](https://blog.csdn.net/Alexinyu/article/details/146985388)
+[2025年30篇](https://blog.csdn.net/Alexinyu?type=blog&year=2025&month=04)
+### 目录展开全部![](https://csdnimg.cn/release/blogv2/dist/pc/img/arrowup-line-bot-White.png)
+收起![](https://csdnimg.cn/release/blogv2/dist/pc/img/arrowup-line-top-White.png)
+### 目录展开全部![](https://csdnimg.cn/release/blogv2/dist/pc/img/arrowup-line-bot-White.png)
+收起![](https://csdnimg.cn/release/blogv2/dist/pc/img/arrowup-line-top-White.png)
+上一篇：[【极简实战】用博查AI Search + Python+DeepSeek打造你的私有知识库！无需Elasticsearch，三步搞定RAG！](https://blog.csdn.net/Alexinyu/article/details/146484461)下一篇：[【硬核实战】用博查AI Search API打造智能问答系统：多模态+流式响应，让AI“会思考”！](https://blog.csdn.net/Alexinyu/article/details/146507397)
+### 最新文章* [走向多模态AI之路（三）：多模态 AI 的挑战与未来](https://blog.csdn.net/Alexinyu/article/details/146988361)
+* [走向多模态AI之路（二）：多模态 AI 如何工作？](https://blog.csdn.net/Alexinyu/article/details/146987299)
+* [走向多模态AI之路（一）：什么是多模态 AI？](https://blog.csdn.net/Alexinyu/article/details/146985388)
+[2025年30篇](https://blog.csdn.net/Alexinyu?type=blog&year=2025&month=04)
+### 目录评论![](https://csdnimg.cn/release/blogv2/dist/pc/img/closeBt.png)
+![](https://csdnimg.cn/release/blogv2/dist/pc/img/commentArrowLeftWhite.png)被折叠的条评论[为什么被折叠?](https://blogdev.blog.csdn.net/article/details/122245662)[![](https://csdnimg.cn/release/blogv2/dist/pc/img/iconPark.png)到【灌水乐园】发言](https://bbs.csdn.net/forums/FreeZone)
+查看更多评论![](https://csdnimg.cn/release/blogv2/dist/pc/img/commentArrowDownWhite.png)
+添加红包祝福语请填写红包祝福语或标题红包数量个红包个数最小为10个
+红包总金额元红包金额最低5元
+余额支付当前余额3.43元[前往充值 \>](https://i.csdn.net/#/wallet/balance/recharge)
+需支付：10.00元
+取消确定![](https://csdnimg.cn/release/blogv2/dist/pc/img/guideRedReward02.png)下一步
+![](https://csdnimg.cn/release/blogv2/dist/pc/img/guideRedReward03.png)知道了
+![]()
+成就一亿技术人!
+[![](https://profile-avatar.csdnimg.cn/default.jpg!2)]()
+hope\_wisdom
+发出的红包实付元[使用余额支付](javascript:;)
+![](https://csdnimg.cn/release/blogv2/dist/pc/img/pay-time-out.png)点击重新获取
+![](https://csdnimg.cn/release/blogv2/dist/pc/img/weixin.png)![](https://csdnimg.cn/release/blogv2/dist/pc/img/zhifubao.png)![](https://csdnimg.cn/release/blogv2/dist/pc/img/jingdong.png)扫码支付
+钱包余额0
+![](https://csdnimg.cn/release/blogv2/dist/pc/img/pay-help.png)
+抵扣说明：1.余额是钱包充值的虚拟货币，按照1:1的比例进行支付金额的抵扣。
+2.余额无法直接购买下载，可以购买VIP、付费专栏及课程。
+[![](https://csdnimg.cn/release/blogv2/dist/pc/img/recharge.png)余额充值](https://i.csdn.net/#/wallet/balance/recharge)
+![]()

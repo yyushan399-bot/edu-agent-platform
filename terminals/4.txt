@@ -1,0 +1,6 @@
+---
+pid: 18784
+cwd: |
+  C:\Users\35778\.cursor\projects\empty-window
+---
+PS C:\Users\35778\.cursor\projects\empty-window> 
