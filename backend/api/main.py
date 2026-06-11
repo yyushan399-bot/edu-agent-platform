@@ -133,6 +133,76 @@ async def health() -> dict[str, str | bool]:
     }
 
 
+@app.post("/group-evaluation")
+async def group_evaluation(
+    file: Annotated[UploadFile, File(description="PDF / DOCX / TXT 项目报告")],
+) -> dict[str, Any]:
+    """
+    上传小组项目报告，依次调用创造性 / 批判性 / 问题解决三个 Agent 并返回综合结果。
+    """
+    from graphs.group_project_graph import run_group_evaluation
+    from utils.file_parser import SUPPORTED_SUFFIXES, extract_text_from_file
+
+    filename = file.filename or "upload"
+    suffix = Path(filename).suffix.lower()
+    if suffix not in SUPPORTED_SUFFIXES:
+        allowed = ", ".join(sorted(SUPPORTED_SUFFIXES))
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件类型: {suffix or '(无扩展名)'}，允许: {allowed}",
+        )
+
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="上传文件为空")
+
+    try:
+        report_text = extract_text_from_file(file_bytes, filename)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("group evaluation file parse failed: %s", filename)
+        raise HTTPException(
+            status_code=400,
+            detail=f"文件解析失败: {type(exc).__name__}: {exc}",
+        ) from exc
+
+    if not is_dotenv_loaded():
+        raise HTTPException(
+            status_code=400,
+            detail="未配置 OPENAI_API_KEY，请在项目根目录 .env 中设置后重启后端",
+        )
+
+    logger.info(
+        "group evaluation request (filename=%s, text_len=%d)",
+        filename,
+        len(report_text),
+    )
+
+    try:
+        evaluation = await run_group_evaluation(report_text)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error("group evaluation failed:\n%s", traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"小组项目评估失败: {type(exc).__name__}: {exc}",
+        ) from exc
+
+    return jsonable_encoder(
+        {
+            "success": True,
+            "filename": filename,
+            "text_length": len(report_text),
+            "text_preview": report_text[:500],
+            **evaluation,
+        }
+    )
+
+
 @app.post("/analyze")
 async def analyze(
     files: Annotated[list[UploadFile], File(description="PDF / DOCX / PNG / JPG / JPEG")] = [],
