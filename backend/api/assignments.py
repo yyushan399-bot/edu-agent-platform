@@ -110,7 +110,7 @@ def _self_assessment_payload(record: SelfAssessment) -> dict[str, Any]:
 async def submit_assignment(
     assignment_id: int,
     user_id: Annotated[int, Form(description="提交用户 ID（users.id）")],
-    self_score: Annotated[float, Form(description="自评分数 0-100")],
+    self_score: Annotated[float, Form(description="自评分数 1-5")],
     self_comment: Annotated[str | None, Form(description="自评说明（可选）")] = None,
     files: Annotated[
         list[UploadFile],
@@ -145,7 +145,7 @@ async def submit_assignment(
     _get_user_or_404(db, user_id)
     _get_assignment_or_404(db, assignment_id)
 
-    score = clamp_score(self_score)
+    score = clamp_score(self_score, min_score=1.0, max_score=5.0)
     comment = (self_comment or "").strip() or None
 
     saved_meta: list[dict[str, str]] = []
@@ -233,6 +233,24 @@ async def submit_assignment(
             detail=f"保存自评或评估记录失败: {exc}",
         ) from exc
 
+    summative_evaluation = None
+    try:
+        from api.summative_evaluation import run_summative_for_assignment
+
+        summative_evaluation = run_summative_for_assignment(
+            db,
+            user_id=user_id,
+            assignment_id=assignment_id,
+            use_llm=False,
+        )
+    except Exception as exc:
+        logger.warning(
+            "终结性评价跳过 user_id=%s assignment_id=%s: %s",
+            user_id,
+            assignment_id,
+            exc,
+        )
+
     active_session_id = (session_id or "").strip()
     if active_session_id:
         try:
@@ -274,11 +292,35 @@ async def submit_assignment(
                     "assistant",
                     feedback,
                     meta={
+                        "evaluation_mode": "route",
+                        "evaluation_stage": "formative",
                         "routes": graph_result.get("routes"),
                         "route_reason": graph_result.get("route_reason"),
                         "total_score": graph_result.get("total_score"),
+                        "rubric_score": (graph_result.get("score_detail") or {}).get(
+                            "rubric_average"
+                        ),
                         "score_detail": graph_result.get("score_detail"),
                         "evaluation_id": evaluation.id,
+                    },
+                )
+            if summative_evaluation and str(
+                summative_evaluation.get("summative_comment") or ""
+            ).strip():
+                session_mgr.save_message(
+                    "assistant",
+                    str(summative_evaluation["summative_comment"]).strip(),
+                    meta={
+                        "evaluation_mode": "summative",
+                        "evaluation_stage": "summative",
+                        "collaboration_score": summative_evaluation.get(
+                            "collaboration_score"
+                        ),
+                        "summative_score": summative_evaluation.get("summative_score"),
+                        "collaboration_scores": summative_evaluation.get(
+                            "collaboration_scores"
+                        ),
+                        "assignment_id": assignment_id,
                     },
                 )
         except Exception as exc:
@@ -298,12 +340,14 @@ async def submit_assignment(
             "route_reason": graph_result.get("route_reason"),
             "final_feedback": graph_result.get("final_feedback"),
             "total_score": graph_result.get("total_score"),
+            "rubric_score": (graph_result.get("score_detail") or {}).get("rubric_average"),
             "score_detail": graph_result.get("score_detail"),
             "theory_result": graph_result.get("theory_result"),
             "practice_result": graph_result.get("practice_result"),
             "data_result": graph_result.get("data_result"),
             "literature_result": graph_result.get("literature_result"),
             "last_saved_evaluation_id": graph_result.get("last_saved_evaluation_id"),
+            "summative_evaluation": summative_evaluation,
         }
     )
 

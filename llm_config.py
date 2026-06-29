@@ -53,40 +53,42 @@ def _get_env(name: str, *fallback_names: str) -> str:
 
 
 def get_openai_api_key() -> str:
-    """读取 API Key（优先 OPENAI_API_KEY）。"""
-    api_key = _get_env("OPENAI_API_KEY", "DEEPSEEK_API_KEY")
+    """读取 API Key（OPENAI_API_KEY / DEEPSEEK_API_KEY / LLM_API_KEY）。"""
+    api_key = _get_env("OPENAI_API_KEY", "DEEPSEEK_API_KEY", "LLM_API_KEY")
     if api_key in _PLACEHOLDER_KEYS:
         raise ValueError(
-            "未配置有效的 OPENAI_API_KEY。请在项目根目录 .env 中设置：\n"
+            "未配置有效的 LLM API Key。请在项目根目录 .env 中设置（DeepSeek 示例）：\n"
             "OPENAI_API_KEY=你的密钥\n"
-            "OPENAI_BASE_URL=https://api.deepseek.com/v1  # DeepSeek 示例\n"
+            "OPENAI_BASE_URL=https://api.deepseek.com/v1\n"
             "OPENAI_MODEL=deepseek-chat\n"
+            "（也兼容 DEEPSEEK_API_KEY 或 LLM_API_KEY / LLM_BASE_URL / LLM_MODEL）\n"
             f"（.env 路径：{_ENV_FILE}）"
         )
     return api_key
 
 
 def get_openai_base_url() -> str:
-    """读取 API Base URL（优先 OPENAI_BASE_URL）。"""
-    base_url = _get_env("OPENAI_BASE_URL", "DEEPSEEK_BASE_URL")
+    """读取 API Base URL。"""
+    base_url = _get_env("OPENAI_BASE_URL", "DEEPSEEK_BASE_URL", "LLM_BASE_URL")
     if not base_url:
         return DEEPSEEK_DEFAULT_BASE_URL
     return _normalize_base_url(base_url)
 
 
 def get_openai_model() -> str:
-    return _get_env("OPENAI_MODEL", "DEEPSEEK_MODEL") or DEFAULT_MODEL
+    return _get_env("OPENAI_MODEL", "DEEPSEEK_MODEL", "LLM_MODEL") or DEFAULT_MODEL
 
 
 def get_openai_temperature() -> float:
-    raw = _get_env("OPENAI_TEMPERATURE", "DEEPSEEK_TEMPERATURE")
+    raw = _get_env("OPENAI_TEMPERATURE", "DEEPSEEK_TEMPERATURE", "LLM_TEMPERATURE")
     if not raw:
         return DEFAULT_TEMPERATURE
     return float(raw)
 
 
 def is_dotenv_loaded() -> bool:
-    """检查 .env 是否已加载且 OPENAI_API_KEY 可用（非占位符）。"""
+    """检查 .env 是否已加载且 LLM API Key 可用（非占位符）。每次调用重新读 .env，便于改配置后无需重启。"""
+    load_dotenv(dotenv_path=_ENV_FILE, override=True)
     try:
         get_openai_api_key()
         return True

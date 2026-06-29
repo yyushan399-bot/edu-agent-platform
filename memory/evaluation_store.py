@@ -111,13 +111,24 @@ def build_evaluation_record(
     routes: list[str] | None = None,
     route: str | None = None,
     route_reason: str | None = None,
+    evaluation_mode: str | None = None,
     theory_result: Any = None,
     practice_result: Any = None,
     data_result: Any = None,
     literature_result: Any = None,
+    group_project_results: Any = None,
+    dimension_summary: Any = None,
+    primary_indicator_summary: Any = None,
+    dimension_mean_score: Any = None,
     total_score: Any = None,
     score_detail: Any = None,
     final_feedback: str | None = None,
+    final_comment: str | None = None,
+    audit_passed: bool | None = None,
+    audit_status: str | None = None,
+    section_results: Any = None,
+    section_summary: Any = None,
+    section_target: str | None = None,
     history_memory: list[Any] | None = None,
     uploaded_files: list[Any] | None = None,
     extra: dict[str, Any] | None = None,
@@ -127,6 +138,7 @@ def build_evaluation_record(
     record: dict[str, Any] = {
         "evaluation_id": str(uuid4()),
         "timestamp": _utc_now_iso(),
+        "evaluation_mode": evaluation_mode or "route",
         "routes": routes or [],
         "route": route,
         "route_reason": route_reason or "",
@@ -135,12 +147,27 @@ def build_evaluation_record(
         "practice_result": practice_result,
         "data_result": data_result,
         "literature_result": literature_result,
+        "group_project_results": group_project_results,
+        "dimension_summary": dimension_summary or [],
+        "primary_indicator_summary": primary_indicator_summary or [],
+        "dimension_mean_score": dimension_mean_score,
         "total_score": total_score,
         "score_detail": score_detail,
         "final_feedback": final_feedback or "",
+        "final_comment": final_comment or "",
         "history_memory": history_memory or [],
         "uploaded_files": uploaded_files or [],
     }
+    if audit_passed is not None:
+        record["audit_passed"] = audit_passed
+    if audit_status:
+        record["audit_status"] = audit_status
+    if section_results is not None:
+        record["section_results"] = section_results
+    if section_summary is not None:
+        record["section_summary"] = section_summary
+    if section_target:
+        record["section_target"] = section_target
     if extra:
         record["extra"] = extra
     return record

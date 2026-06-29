@@ -6,7 +6,7 @@ from typing import Literal, TypedDict
 
 PeerType = Literal["generous", "strict", "objective"]
 
-BIAS_THRESHOLD = 15.0
+BIAS_THRESHOLD = 0.75
 
 
 class PeerCalibrationResult(TypedDict):
@@ -16,11 +16,17 @@ class PeerCalibrationResult(TypedDict):
 
 
 def _clamp_score(value: float) -> float:
-    return float(max(0.0, min(100.0, round(float(value), 2))))
+    return float(max(1.0, min(5.0, round(float(value), 2))))
 
 
 def classify_peer_type(bias: float, *, threshold: float = BIAS_THRESHOLD) -> PeerType:
-    """根据互评偏差分类评价倾向。"""
+    """
+    根据互评偏差分类评价倾向（1-5 分制）。
+
+    - bias > threshold  → generous（宽松，给分偏高）
+    - bias < -threshold → strict（严格，给分偏低）
+    - 否则              → objective（较客观）
+    """
     if bias > threshold:
         return "generous"
     if bias < -threshold:
@@ -30,7 +36,7 @@ def classify_peer_type(bias: float, *, threshold: float = BIAS_THRESHOLD) -> Pee
 
 def compute_peer_bias(peer_scores: list[float], ai_scores: list[float]) -> float:
     """
-    计算平均互评偏差。
+    计算平均互评偏差（输入分数均为 1-5 分制）。
 
     对每一对：bias_i = peer_score_i - ai_score_i
     peer_bias = mean(bias_i)
@@ -57,13 +63,13 @@ def calibrate_peer_scores(
     threshold: float = BIAS_THRESHOLD,
 ) -> PeerCalibrationResult:
     """
-    根据多组互评与 AI 分数计算 peer_bias 并分类。
+    根据多组互评与 AI 分数计算 peer_bias 并分类（1-5 分制）。
 
     peer_bias = mean(peer_score - ai_score)
 
-    - peer_bias > 15  → generous（宽松，给分偏高）
-    - peer_bias < -15 → strict（严格，给分偏低）
-    - 否则            → objective（较客观）
+    - peer_bias > 0.75  → generous（宽松，给分偏高）
+    - peer_bias < -0.75 → strict（严格，给分偏低）
+    - 否则              → objective（较客观）
     """
     peer_bias = compute_peer_bias(peer_scores, ai_scores)
     peer_type = classify_peer_type(peer_bias, threshold=threshold)

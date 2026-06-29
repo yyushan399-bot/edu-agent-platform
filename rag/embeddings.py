@@ -6,7 +6,7 @@ from functools import lru_cache
 
 from langchain_huggingface import HuggingFaceEmbeddings
 
-BGE_M3_MODEL = "BAAI/bge-m3"
+BGE_M3_MODEL = "BAAI/bge-small-zh-v1.5"
 
 
 @lru_cache(maxsize=1)

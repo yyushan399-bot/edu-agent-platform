@@ -18,6 +18,8 @@ import logging
 import math
 import os
 import re
+import shutil
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple, TypedDict
@@ -461,9 +463,71 @@ class ChromaRagStore:
         return results[:top_n]
 
 
-@lru_cache(maxsize=1)
-def get_chroma_store() -> ChromaRagStore:
-    return ChromaRagStore()
+_chroma_store: Optional["ChromaRagStore"] = None
+_chroma_disabled = False
+
+
+def _quarantine_chroma_dir() -> None:
+    """隔离损坏或不可用的 Chroma 持久化目录，便于下次重建。"""
+    if not CHROMA_PERSIST_DIR.exists():
+        return
+    stamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    backup = CHROMA_PERSIST_DIR.with_name(f"chroma.bad.{stamp}")
+    try:
+        shutil.move(str(CHROMA_PERSIST_DIR), str(backup))
+        logger.warning("已隔离 ChromaDB 目录 → %s", backup.name)
+    except Exception as exc:
+        logger.warning("隔离 ChromaDB 目录失败：%s", exc)
+
+
+def try_get_chroma_store(*, retry_after_quarantine: bool = True) -> Optional["ChromaRagStore"]:
+    """
+    安全获取 Chroma 实例；失败时返回 None 并降级 JSON 检索。
+    捕获 BaseException（含 PyO3 PanicException），避免拖垮整次评价。
+    """
+    global _chroma_store, _chroma_disabled
+
+    if not USE_CHROMA or _chroma_disabled:
+        return None
+    if _chroma_store is not None:
+        return _chroma_store
+
+    def _init() -> "ChromaRagStore":
+        return ChromaRagStore()
+
+    try:
+        _chroma_store = _init()
+        return _chroma_store
+    except BaseException as exc:
+        logger.warning("ChromaDB 初始化失败：%s", exc)
+        if retry_after_quarantine:
+            _quarantine_chroma_dir()
+            try:
+                _chroma_store = _init()
+                logger.info("ChromaDB 隔离旧数据后初始化成功")
+                return _chroma_store
+            except BaseException as exc2:
+                logger.warning("ChromaDB 重试仍失败，降级 JSON RAG：%s", exc2)
+        _chroma_disabled = True
+        _chroma_store = None
+        return None
+
+
+def get_chroma_store() -> "ChromaRagStore":
+    store = try_get_chroma_store()
+    if store is None:
+        raise RuntimeError("ChromaDB 不可用，已降级 JSON RAG")
+    return store
+
+
+def _rag_backend_name() -> str:
+    store = try_get_chroma_store(retry_after_quarantine=False)
+    if store is None:
+        return "json"
+    try:
+        return "chroma" if store.count() > 0 else "json"
+    except BaseException:
+        return "json"
 
 
 # ---------------------------------------------------------------------------
@@ -563,10 +627,12 @@ def build_rag_index(
 
     if sync_chroma:
         try:
-            synced = get_chroma_store().sync_from_index(index, force=True)
-            index["_meta"]["chroma_synced"] = synced
-            logger.info("ChromaDB 已同步 %d 条参考片段", synced)
-        except Exception as exc:
+            store = try_get_chroma_store()
+            if store is not None:
+                synced = store.sync_from_index(index, force=True)
+                index["_meta"]["chroma_synced"] = synced
+                logger.info("ChromaDB 已同步 %d 条参考片段", synced)
+        except BaseException as exc:
             logger.warning("ChromaDB 同步失败：%s", exc)
 
     return index
@@ -630,10 +696,10 @@ def load_rag_index(
 
     if sync_chroma:
         try:
-            store = get_chroma_store()
-            if store.count() == 0 and index.get("fragments"):
+            store = try_get_chroma_store()
+            if store is not None and store.count() == 0 and index.get("fragments"):
                 store.sync_from_index(index, force=True)
-        except Exception as exc:
+        except BaseException as exc:
             logger.warning("ChromaDB 懒同步失败：%s", exc)
 
     return index
@@ -776,8 +842,8 @@ def vector_search(
     """
     if USE_CHROMA:
         try:
-            store = get_chroma_store()
-            if store.count() > 0:
+            store = try_get_chroma_store()
+            if store is not None and store.count() > 0:
                 chroma_results = store.vector_search(
                     query_text,
                     top_n=top_n,
@@ -785,7 +851,7 @@ def vector_search(
                 )
                 if chroma_results:
                     return chroma_results
-        except Exception as exc:
+        except BaseException as exc:
             logger.warning("ChromaDB vector_search 失败，回退 JSON：%s", exc)
 
     return vector_search_json(index, query_text, top_n, target_stage)
@@ -932,7 +998,7 @@ def retrieve_rag_context_auto(
 
     debug = {
         "mode": "rag_auto_dimension_filtered",
-        "backend": "chroma" if USE_CHROMA and get_chroma_store().count() > 0 else "json",
+        "backend": _rag_backend_name(),
         "schema": index.get("_meta", {}).get("schema", "unknown"),
         "dimension_name": dimension_name,
         "target_stage": dimension_name,
@@ -977,7 +1043,7 @@ def retrieve_rag_context(
 
     debug = {
         "mode": "rag_target_stage",
-        "backend": "chroma" if USE_CHROMA and get_chroma_store().count() > 0 else "json",
+        "backend": _rag_backend_name(),
         "schema": index.get("_meta", {}).get("schema", "unknown"),
         "target_stage": target_stage,
         "top_k": top_k,
@@ -1244,6 +1310,7 @@ __all__ = [
     "embed_text",
     "format_rag_context",
     "get_chroma_store",
+    "try_get_chroma_store",
     "get_rag_service",
     "ingest_reference_report",
     "load_rag_index",

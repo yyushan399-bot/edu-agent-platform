@@ -1,7 +1,7 @@
 """
 理论域 RAG：ChromaDB + BAAI/bge-m3 + PDF 入库 + similarity 检索。
 
-供 theory_agent 在评估前自动检索 reference_context。
+供 agents.theory_agent 在评估前自动检索 reference_context。
 """
 
 from __future__ import annotations

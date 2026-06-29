@@ -6,7 +6,7 @@ from typing import Literal, TypedDict
 
 SelfType = Literal["over_estimation", "under_estimation", "accurate"]
 
-BIAS_THRESHOLD = 15.0
+BIAS_THRESHOLD = 0.75
 
 
 class SelfCalibrationResult(TypedDict):
@@ -15,11 +15,17 @@ class SelfCalibrationResult(TypedDict):
 
 
 def _clamp_score(value: float) -> float:
-    return float(max(0.0, min(100.0, round(float(value), 2))))
+    return float(max(1.0, min(5.0, round(float(value), 2))))
 
 
 def classify_self_type(bias: float, *, threshold: float = BIAS_THRESHOLD) -> SelfType:
-    """根据偏差值分类自评类型。"""
+    """
+    根据偏差值分类自评类型（1-5 分制）。
+
+    - bias > threshold  → over_estimation（高估）
+    - bias < -threshold → under_estimation（低估）
+    - 否则              → accurate（较准确）
+    """
     if bias > threshold:
         return "over_estimation"
     if bias < -threshold:
@@ -34,13 +40,13 @@ def calibrate_self_score(
     threshold: float = BIAS_THRESHOLD,
 ) -> SelfCalibrationResult:
     """
-    计算自评偏差并返回校准结果。
+    计算自评偏差并返回校准结果（输入/输出均为 1-5 分制）。
 
     bias = self_score - ai_score
 
-    - bias > 15  → over_estimation（高估）
-    - bias < -15 → under_estimation（低估）
-    - 否则       → accurate（较准确）
+    - bias > 0.75  → over_estimation（高估）
+    - bias < -0.75 → under_estimation（低估）
+    - 否则         → accurate（较准确）
     """
     ai = _clamp_score(ai_score)
     self_val = _clamp_score(self_score)

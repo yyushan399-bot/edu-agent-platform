@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -19,6 +20,8 @@ from services.peer_review_service import (
     SelfReviewNotAllowedError,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/peer-review", tags=["peer-review"])
 
 
@@ -26,7 +29,7 @@ class SubmitPeerReviewRequest(BaseModel):
     reviewer_id: int = Field(..., description="评价者 user_id")
     target_user_id: int = Field(..., description="被评价者 user_id")
     assignment_id: int = Field(..., description="作业 ID")
-    score: float = Field(..., ge=0, le=100, description="互评分数 0-100")
+    score: float = Field(..., ge=1, le=5, description="互评分数 1-5")
     comment: str | None = Field(None, description="互评评语（可选）")
 
 
@@ -98,10 +101,29 @@ async def submit_peer_review(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"提交互评失败: {exc}") from exc
 
+    summative_evaluation = None
+    try:
+        from api.summative_evaluation import run_summative_for_assignment
+
+        summative_evaluation = run_summative_for_assignment(
+            db,
+            user_id=body.target_user_id,
+            assignment_id=body.assignment_id,
+            use_llm=False,
+        )
+    except Exception as exc:
+        logger.warning(
+            "被评者终结性评价跳过 target=%s assignment=%s: %s",
+            body.target_user_id,
+            body.assignment_id,
+            exc,
+        )
+
     return jsonable_encoder(
         {
             "success": True,
             "peer_assessment": service.peer_assessment_to_dict(record),
+            "summative_evaluation": summative_evaluation,
         }
     )
 

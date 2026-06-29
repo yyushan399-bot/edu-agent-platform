@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, TypedDict
 
 from agents.emotion_agent import EmotionResult
-from agents.peer_calibration_agent import PeerCalibrationResult
+from agents.peer_calibration_agent import BIAS_THRESHOLD, PeerCalibrationResult
 from agents.self_calibration_agent import SelfCalibrationResult
 
 SELF_TYPE_LABELS: dict[str, str] = {
@@ -53,6 +53,50 @@ def _safe_float(value: object, default: float | None = None) -> float | None:
         return round(float(value), 2)
     except (TypeError, ValueError):
         return default
+
+
+def compute_collaboration_score_from_calibration(
+    self_calibration: SelfCalibrationResult | dict[str, Any],
+    peer_calibration: PeerCalibrationResult | dict[str, Any],
+    *,
+    threshold: float = BIAS_THRESHOLD,
+) -> float | None:
+    """
+    基于自评偏差（bias）与互评偏差（peer_bias）计算协作校准分（0-100）。
+
+    偏差绝对值越小，协作/评价校准越好；阈值参照自评/互评校准 Agent。
+    """
+    self_cal = dict(self_calibration or {})
+    peer_cal = dict(peer_calibration or {})
+    parts: list[float] = []
+
+    self_bias = _safe_float(self_cal.get("bias"))
+    if self_bias is not None:
+        ratio = min(1.0, abs(self_bias) / max(threshold * 2, 1.0))
+        parts.append(round(100.0 * (1.0 - ratio), 2))
+
+    peer_count = int(peer_cal.get("count") or 0)
+    peer_bias = _safe_float(peer_cal.get("peer_bias"))
+    if peer_count > 0 and peer_bias is not None:
+        ratio = min(1.0, abs(peer_bias) / max(threshold * 2, 1.0))
+        parts.append(round(100.0 * (1.0 - ratio), 2))
+
+    if not parts:
+        return None
+    return round(sum(parts) / len(parts), 2)
+
+
+def _resolve_collaboration_score(
+    collaboration_score: float | None,
+    self_calibration: dict[str, Any],
+    peer_calibration: dict[str, Any],
+) -> float | None:
+    if collaboration_score is not None:
+        return _safe_float(collaboration_score)
+    return compute_collaboration_score_from_calibration(
+        self_calibration,
+        peer_calibration,
+    )
 
 
 def _performance_level(score: float | None) -> str:
@@ -245,6 +289,8 @@ def _build_suggestions(
     self_cal: dict[str, Any],
     peer_cal: dict[str, Any],
     emotion: dict[str, Any],
+    *,
+    collaboration_score: float | None = None,
 ) -> str:
     suggestions: list[str] = []
 
@@ -256,6 +302,16 @@ def _build_suggestions(
     elif total is not None and total >= 85:
         suggestions.append(
             "在保持现有优势的同时，尝试挑战更高阶任务（如延伸论证、跨文献比较或方法改进）。"
+        )
+
+    if collaboration_score is not None and collaboration_score < 60:
+        suggestions.append(
+            "自评与互评尺度与 AI 评估偏差较大，建议对照量规逐条核对后再打分，"
+            "并在反馈中引用具体证据。"
+        )
+    elif collaboration_score is not None and collaboration_score >= 85:
+        suggestions.append(
+            "评价尺度与 AI 评估整体较为一致，可继续以证据驱动的方式开展自评与互评。"
         )
 
     self_type = self_cal.get("self_type", "accurate")
@@ -316,6 +372,7 @@ def generate_meta_evaluation_markdown(
     peer_calibration: PeerCalibrationResult | dict[str, Any],
     emotion: EmotionResult | dict[str, Any],
     *,
+    collaboration_score: float | None = None,
     title: str = "综合元评估报告",
 ) -> str:
     """生成 Markdown 格式元评估报告。"""
@@ -323,6 +380,11 @@ def generate_meta_evaluation_markdown(
     self_cal = dict(self_calibration or {})
     peer_cal = dict(peer_calibration or {})
     emotion_data = dict(emotion or {})
+    resolved_collaboration = _resolve_collaboration_score(
+        collaboration_score,
+        self_cal,
+        peer_cal,
+    )
 
     sections = [
         f"# {title}",
@@ -345,7 +407,13 @@ def generate_meta_evaluation_markdown(
         "",
         "## 5. 改进建议",
         "",
-        _build_suggestions(ai, self_cal, peer_cal, emotion_data),
+        _build_suggestions(
+            ai,
+            self_cal,
+            peer_cal,
+            emotion_data,
+            collaboration_score=resolved_collaboration,
+        ),
         "",
     ]
     return "\n".join(sections)
@@ -361,6 +429,7 @@ class MetaEvaluationAgent:
         peer_calibration: PeerCalibrationResult | dict[str, Any],
         emotion: EmotionResult | dict[str, Any],
         *,
+        collaboration_score: float | None = None,
         title: str = "综合元评估报告",
     ) -> MetaEvaluationResult:
         markdown = generate_meta_evaluation_markdown(
@@ -368,6 +437,7 @@ class MetaEvaluationAgent:
             self_calibration,
             peer_calibration,
             emotion,
+            collaboration_score=collaboration_score,
             title=title,
         )
         return {"markdown": markdown}
@@ -376,5 +446,6 @@ class MetaEvaluationAgent:
 __all__ = [
     "MetaEvaluationAgent",
     "MetaEvaluationResult",
+    "compute_collaboration_score_from_calibration",
     "generate_meta_evaluation_markdown",
 ]

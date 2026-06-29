@@ -18,11 +18,11 @@ if str(BACKEND) not in sys.path:
 
 def main() -> None:
     uvicorn.run(
-        "api.main:app",
+        "backend.main:app",
         host="127.0.0.1",
-        port=8000,
+        port=8391,
         reload=True,
-        app_dir=str(BACKEND),
+        app_dir=str(ROOT),
     )
 
 

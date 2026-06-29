@@ -10,9 +10,10 @@ from memory.evaluation_store import list_evaluations, load_student_memory
 EMPTY_MEMORY_HINT = "（该学生暂无历史评估记录。）"
 
 MEMORY_CONTEXT_HEADER = (
-    "【学生历史评估参考 — 含过往分数与反馈】\n"
+    "【学生历史形成性评估参考 — 含过往分数与反馈】\n"
     "请对照以下记录识别进步趋势、重复出现的薄弱点与已给过的建议；"
-    "避免向学生复述「根据历史记录」等表述，将历史洞见自然融入本次评价。"
+    "注意四路由分数为 0–100，PBL/章节为 1.0–5.0，勿混用尺度。"
+    "避免向学生复述「根据历史记录」等表述，将历史洞见自然融入本次形成性评价。"
 )
 
 
@@ -29,6 +30,46 @@ def _truncate(text: str, limit: int = 200) -> str:
     if len(text) <= limit:
         return text
     return text[:limit] + "..."
+
+
+def _format_dimension_summary(record: dict[str, Any]) -> str:
+    items = record.get("dimension_summary")
+    if not isinstance(items, list) or not items:
+        return ""
+
+    parts: list[str] = []
+    for item in items[:12]:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("dimension_name") or item.get("dimension_key") or "").strip()
+        mean = item.get("mean")
+        if not name:
+            continue
+        if mean is None:
+            parts.append(name)
+        else:
+            parts.append(f"{name}={mean}")
+    if not parts:
+        return ""
+    return "12维: " + ", ".join(parts)
+
+
+def _format_primary_indicator_summary(record: dict[str, Any]) -> str:
+    items = record.get("primary_indicator_summary")
+    if not isinstance(items, list) or not items:
+        return ""
+
+    parts: list[str] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("primary_indicator_name") or "").strip()
+        mean = item.get("mean")
+        if name and mean is not None:
+            parts.append(f"{name}={mean}")
+    if not parts:
+        return ""
+    return "一级指标: " + ", ".join(parts)
 
 
 def _score_from_result(result: Any) -> str:
@@ -67,9 +108,18 @@ def format_evaluation_summary(record: dict[str, Any], *, index: int | None = Non
         header_parts.append(ts)
     header_parts.append(f"路由[{routes}]")
 
+    evaluation_mode = str(record.get("evaluation_mode") or "route").strip()
+    if evaluation_mode == "pbl_report":
+        header_parts.append("模式[PBL小组项目]")
+    elif evaluation_mode == "section_report":
+        header_parts.append("模式[章节反馈]")
+
     total = record.get("total_score")
     if total is not None and total != "":
-        header_parts.append(f"综合分[{total}]")
+        if evaluation_mode == "route":
+            header_parts.append(f"形成性综合分[{total}/100]")
+        else:
+            header_parts.append(f"综合分[{total}]")
 
     header = " | ".join(header_parts)
     lines = [header]
@@ -77,6 +127,49 @@ def format_evaluation_summary(record: dict[str, Any], *, index: int | None = Non
     preview = (record.get("student_input_preview") or "").strip()
     if preview:
         lines.append(f"作答摘要: {_truncate(preview, 300)}")
+
+    if evaluation_mode == "pbl_report":
+        dimension_mean = record.get("dimension_mean_score")
+        if dimension_mean is not None and dimension_mean != "":
+            lines.append(f"PBL 综合分(1-5): {dimension_mean}")
+        primary_line = _format_primary_indicator_summary(record)
+        if primary_line:
+            lines.append(primary_line)
+        dimension_line = _format_dimension_summary(record)
+        if dimension_line:
+            lines.append(dimension_line)
+        group_results = record.get("group_project_results")
+        if isinstance(group_results, dict):
+            for key, label in (
+                ("creativity", "创造性"),
+                ("critical", "批判性"),
+                ("problemsolving", "问题解决"),
+            ):
+                summary = _summarize_result(group_results.get(key), keys=("feedback",))
+                if summary:
+                    lines.append(f"{label}: {summary}")
+
+    if evaluation_mode == "section_report":
+        summary_obj = record.get("section_summary")
+        if isinstance(summary_obj, dict):
+            overall = summary_obj.get("overall_score")
+            if overall is not None:
+                lines.append(f"章节综合分(1-5): {overall}")
+            section_scores = summary_obj.get("section_scores")
+            if isinstance(section_scores, dict) and section_scores:
+                score_line = ", ".join(
+                    f"{name}={score}" for name, score in section_scores.items()
+                )
+                lines.append(f"各章得分: {score_line}")
+        section_results = record.get("section_results")
+        if isinstance(section_results, list):
+            for item in section_results[:7]:
+                if not isinstance(item, dict):
+                    continue
+                name = str(item.get("section_name") or "").strip()
+                score = item.get("total_score")
+                if name and score is not None:
+                    lines.append(f"{name}: {score}/5.0")
 
     theory = _summarize_result(
         record.get("theory_result"),
@@ -104,8 +197,8 @@ def format_evaluation_summary(record: dict[str, Any], *, index: int | None = Non
         keys=(
             "student_viewpoint",
             "alignment_analysis",
-            "critical_thinking_score",
-            "innovation_score",
+            "critical_thinking_feedback",
+            "innovation_feedback",
             "suggestions",
         ),
     )

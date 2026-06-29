@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Environment variables
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime data
+*.db
+agent_system.db
+data/
+agent-transcripts/
+memory/sessions/
+canvases/
+
+# Uploads
+backend/uploads/
+uploads/
+
+# Cache
+.pytest_cache/
+
+# Build and packages
+project.zip
+node_modules/
+frontend/node_modules/
+
+# Backup
+._backup_old_frontend_backend/
+
+# Session & temp
+input/
+terminals/

@@ -21,7 +21,12 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from graphs.group_project_graph import run_group_evaluation
+from graphs.group_project_graph import (
+    _compute_dimension_mean_score,
+    _extract_dimension_summary,
+    run_full_pbl_evaluation,
+    run_group_evaluation,
+)
 
 
 SAMPLE_REPORT_TEXT = """
@@ -70,9 +75,44 @@ SAMPLE_REPORT_TEXT = """
 预期效果：降低标点误差，提高 a-t 曲线与理论预测吻合度。
 """.strip()
 
-TOP_LEVEL_KEYS = ("creativity", "critical", "problemsolving", "final_score", "final_feedback")
+TOP_LEVEL_KEYS = (
+    "creativity",
+    "critical",
+    "problemsolving",
+    "dimension_summary",
+    "final_score",
+    "dimension_mean_score",
+    "final_feedback",
+    "errors",
+)
+FULL_PBL_EXTRA_KEYS = (
+    "primary_indicator_summary",
+    "audit_passed",
+    "audit_status",
+    "output_mode",
+    "internal_audit",
+    "strengths",
+    "weaknesses",
+    "revision_suggestions",
+    "final_comment",
+)
 AGENT_KEYS = ("creativity", "critical", "problemsolving")
 AGENT_RESULT_FIELDS = ("score", "feedback", "evidence")
+DIMENSION_SUMMARY_FIELDS = (
+    "dimension_key",
+    "dimension_name",
+    "primary_indicator",
+    "agent_key",
+    "mean",
+    "cv",
+    "consistency_level",
+    "summary_comment",
+)
+EXPECTED_PRIMARY_INDICATORS = {
+    "creativity": "创造性思维",
+    "critical": "批判性思维",
+    "problemsolving": "问题解决能力",
+}
 
 
 def _safe_print_json(data: dict) -> None:
@@ -89,6 +129,43 @@ def _has_api_key() -> bool:
         if value and value not in {"", "your_api_key_here", "sk-xxx"}:
             return True
     return False
+
+
+class TestGroupProjectGraphHelpers(unittest.TestCase):
+    def test_extract_dimension_summary_adds_primary_indicator(self) -> None:
+        grading_result = {
+            "final_report": {
+                "dimension_summary": [
+                    {
+                        "dimension_key": "problem_posing",
+                        "dimension_name": "问题提出",
+                        "mean": 3.5,
+                        "cv": 0.1,
+                        "consistency_level": "评分稳定",
+                        "summary_comment": "示例评语",
+                    }
+                ]
+            }
+        }
+
+        items = _extract_dimension_summary(
+            grading_result,
+            agent_key="creativity",
+            primary_indicator="创造性思维",
+        )
+
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["primary_indicator"], "创造性思维")
+        self.assertEqual(items[0]["agent_key"], "creativity")
+        self.assertEqual(items[0]["dimension_name"], "问题提出")
+        self.assertEqual(items[0]["mean"], 3.5)
+
+    def test_compute_dimension_mean_score(self) -> None:
+        items = [
+            {"mean": 2.0},
+            {"mean": 4.0},
+        ]
+        self.assertEqual(_compute_dimension_mean_score(items), 3.0)
 
 
 @unittest.skipUnless(_has_api_key(), "需要配置 OPENAI_API_KEY 或 DEEPSEEK_API_KEY")
@@ -128,15 +205,83 @@ class TestGroupProjectGraph(unittest.TestCase):
             self.assertLessEqual(agent_result["score"], 5.0)
             self.assertTrue(len(agent_result["feedback"].strip()) > 0)
 
+        self.assertIsInstance(result["dimension_summary"], list)
+        self.assertEqual(len(result["dimension_summary"]), 12)
+
+        counts_by_agent = {key: 0 for key in AGENT_KEYS}
+        for item in result["dimension_summary"]:
+            self.assertIsInstance(item, dict)
+            for field in DIMENSION_SUMMARY_FIELDS:
+                self.assertIn(field, item, f"dimension_summary 缺少字段: {field}")
+
+            self.assertIsInstance(item["mean"], (int, float))
+            self.assertGreater(item["mean"], 0.0)
+            self.assertLessEqual(item["mean"], 5.0)
+            self.assertTrue(item["dimension_name"].strip())
+            self.assertTrue(item["summary_comment"].strip())
+            self.assertIn(item["agent_key"], AGENT_KEYS)
+            self.assertEqual(
+                item["primary_indicator"],
+                EXPECTED_PRIMARY_INDICATORS[item["agent_key"]],
+            )
+            counts_by_agent[item["agent_key"]] += 1
+
+        for agent_key, expected_count in counts_by_agent.items():
+            self.assertEqual(expected_count, 4, f"{agent_key} 应有 4 个二级维度")
+
         self.assertIsInstance(result["final_score"], (int, float))
+        self.assertIsInstance(result["dimension_mean_score"], (int, float))
         self.assertIsInstance(result["final_feedback"], str)
+        self.assertIsInstance(result["errors"], list)
+
         self.assertGreater(result["final_score"], 0.0)
         self.assertLessEqual(result["final_score"], 5.0)
+        self.assertGreater(result["dimension_mean_score"], 0.0)
+        self.assertLessEqual(result["dimension_mean_score"], 5.0)
         self.assertTrue(len(result["final_feedback"].strip()) > 0)
 
         agent_scores = [result[key]["score"] for key in AGENT_KEYS]
-        expected_mean = round(sum(agent_scores) / len(agent_scores), 2)
-        self.assertEqual(result["final_score"], expected_mean)
+        expected_primary_mean = round(sum(agent_scores) / len(agent_scores), 2)
+        self.assertEqual(result["final_score"], expected_primary_mean)
+
+        dimension_means = [item["mean"] for item in result["dimension_summary"]]
+        expected_dimension_mean = round(sum(dimension_means) / len(dimension_means), 2)
+        self.assertEqual(result["dimension_mean_score"], expected_dimension_mean)
+
+
+@unittest.skipUnless(
+    _has_api_key() and os.getenv("RUN_FULL_PBL_TEST") == "1",
+    "需要 API Key 且设置 RUN_FULL_PBL_TEST=1 才运行完整 PBL 集成测试",
+)
+class TestFullPblEvaluation(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.scoring_times = int(os.getenv("TEST_SCORING_TIMES", "1"))
+        cls.rag_top_k = int(os.getenv("TEST_RAG_TOP_K", "4"))
+        cls.review_rounds = int(os.getenv("TEST_REVIEW_ROUNDS", "1"))
+
+    def test_run_full_pbl_evaluation_returns_expected_fields(self) -> None:
+        result = asyncio.run(
+            run_full_pbl_evaluation(
+                SAMPLE_REPORT_TEXT,
+                scoring_times=self.scoring_times,
+                rag_top_k=self.rag_top_k,
+                review_rounds=self.review_rounds,
+            )
+        )
+
+        print("\n========== run_full_pbl_evaluation() 输出 ==========")
+        _safe_print_json(result)
+        print("===================================================\n")
+
+        for key in TOP_LEVEL_KEYS + FULL_PBL_EXTRA_KEYS:
+            self.assertIn(key, result, f"缺少顶层字段: {key}")
+
+        self.assertEqual(len(result["dimension_summary"]), 12)
+        self.assertEqual(len(result["primary_indicator_summary"]), 3)
+        self.assertIsInstance(result["audit_passed"], bool)
+        self.assertTrue(result["audit_status"])
+        self.assertTrue(result["final_comment"].strip())
 
 
 if __name__ == "__main__":

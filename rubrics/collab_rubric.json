@@ -1,0 +1,77 @@
+{
+  "meta": {
+    "title": "协作能力量规",
+    "subtitle": "基于自评与互评校准（内部指标，不向学生展示）",
+    "version": "3.0",
+    "date": "2026-06-22",
+    "visibility": "internal_only",
+    "description": "协作分数为内部指标，不向学生展示，仅在后端传递给 meta_evaluation_agent。偏差 bias / peer_bias 基于 1-5 分制计算。",
+    "agents": ["self_calibration_agent", "peer_calibration_agent"]
+  },
+  "scale": {
+    "type": "continuous",
+    "min": 0,
+    "max": 100,
+    "formula": "协作维度综合分 = 自评准确性得分 × 0.5 + 互评客观性得分 × 0.5"
+  },
+  "dimensions": [
+    {
+      "id": "self_accuracy",
+      "name": "自评准确性",
+      "data_source": "self_calibration → bias",
+      "weight": 0.5,
+      "formula": "max(0, 100 - abs(bias) × 25)",
+      "levels": [
+        {
+          "range": "90-100",
+          "score_min": 90,
+          "description": "偏差 |bias| < 0.75。自我评估与 AI 评分高度一致，自我认知准确。"
+        },
+        {
+          "range": "70-89",
+          "score_min": 70,
+          "description": "0.75 ≤ |bias| < 1.5。偏差在合理范围内，整体判断较为客观。"
+        },
+        {
+          "range": "40-69",
+          "score_min": 40,
+          "description": "1.5 ≤ |bias| < 2.5。自评存在较明显偏差，需加强自我反省。"
+        },
+        {
+          "range": "0-39",
+          "score_min": 0,
+          "description": "|bias| ≥ 2.5。自评严重失实，存在「老好人」或极度缺乏自信倾向。"
+        }
+      ]
+    },
+    {
+      "id": "peer_objectivity",
+      "name": "互评客观性",
+      "data_source": "peer_calibration → peer_bias",
+      "weight": 0.5,
+      "formula": "max(0, 100 - abs(peer_bias) × 25)",
+      "levels": [
+        {
+          "range": "90-100",
+          "score_min": 90,
+          "description": "|peer_bias| < 0.75。同伴评价与 AI 高度吻合，有区分度。"
+        },
+        {
+          "range": "70-89",
+          "score_min": 70,
+          "description": "0.75 ≤ |peer_bias| < 1.5。互评整体客观，偏差可接受。"
+        },
+        {
+          "range": "40-69",
+          "score_min": 40,
+          "description": "1.5 ≤ |peer_bias| < 2.5。存在明显宽松/严苛倾向，区分度不足。"
+        },
+        {
+          "range": "0-39",
+          "score_min": 0,
+          "description": "|peer_bias| ≥ 2.5。互评严重失实，敷衍式评分或恶意低分。"
+        }
+      ]
+    }
+  ]
+}

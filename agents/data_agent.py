@@ -11,6 +11,7 @@ import llm_config  # noqa: F401
 from llm_config import get_chat_llm
 from rag.data_rag import retrieve_data_context
 from agents.context_utils import build_reference_context, get_memory_context
+from rubrics.rubric_prompt_utils import average_sub_scores, clamp_sub_score, format_dimension_rubric_block
 from state import DataNodeUpdate, DataResult, HistoryTurn, LearningState
 
 
@@ -26,6 +27,9 @@ class DataAgentOutput(BaseModel):
     modeling: str = Field(
         description="建模严谨性：假设、方法、验证与结论的严谨程度"
     )
+    data_collection_score: int = Field(ge=1, le=5, description="数据采集 1-5 分")
+    data_analysis_score: int = Field(ge=1, le=5, description="数据分析 1-5 分")
+    visualization_score: int = Field(ge=1, le=5, description="可视化建模 1-5 分")
     feedback: str = Field(description="面向学生的综合形成性评价与改进建议")
     score: int = Field(
         ge=0,
@@ -37,6 +41,8 @@ class DataAgentOutput(BaseModel):
 
 
 _parser = PydanticOutputParser(pydantic_object=DataAgentOutput)
+
+DATA_RUBRIC_BLOCK = format_dimension_rubric_block("data")
 
 DATA_PROMPT = ChatPromptTemplate.from_messages(
     [
@@ -53,10 +59,13 @@ DATA_PROMPT = ChatPromptTemplate.from_messages(
             "1. data_analysis（数据分析）：清洗、统计分析与解读是否合理\n"
             "2. visualization（可视化表达）：图表类型、标注、可读性是否清晰有效\n"
             "3. modeling（建模严谨性）：假设、方法、验证与结论是否严谨\n"
-            "4. feedback：面向学生的综合形成性评价与改进建议，具体可操作\n"
-            "5. score：0-100 整数百分制综合分，须综合以上三项加权得出；"
+            "4. data_collection_score / data_analysis_score / visualization_score："
+            "各 1-5 整数，须严格对照下方量规\n"
+            "5. feedback：面向学生的综合形成性评价与改进建议，具体可操作\n"
+            "6. score：0-100 整数百分制综合分，须综合以上三项加权得出；"
             "三项均优秀时可给 85-100，有明显硬伤时应低于 60，并确保与 feedback 语气一致。\n"
-            "若学生使用中文作答，请用中文回复；若使用英文，请用英文回复。\n"
+            + DATA_RUBRIC_BLOCK
+            + "若学生使用中文作答，请用中文回复；若使用英文，请用英文回复。\n"
             "你必须只输出 JSON，不要输出 markdown 代码块或其它说明文字。\n"
             "{format_instructions}",
         ),
@@ -70,17 +79,21 @@ DATA_PROMPT = ChatPromptTemplate.from_messages(
 ).partial(format_instructions=_parser.get_format_instructions())
 
 
-def _clamp_score(value: int | float) -> float:
-    return float(max(0, min(100, round(float(value)))))
-
-
 def _to_data_result(output: DataAgentOutput) -> DataResult:
+    subs = [
+        clamp_sub_score(output.data_collection_score),
+        clamp_sub_score(output.data_analysis_score),
+        clamp_sub_score(output.visualization_score),
+    ]
     return {
         "data_analysis": str(output.data_analysis),
         "visualization": str(output.visualization),
         "modeling": str(output.modeling),
+        "data_collection_score": subs[0],
+        "data_analysis_score": subs[1],
+        "visualization_score": subs[2],
         "feedback": str(output.feedback),
-        "score": _clamp_score(output.score),
+        "score": average_sub_scores(subs),
     }
 
 

@@ -94,4 +94,11 @@ def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
     return text
 
 
-__all__ = ["SUPPORTED_SUFFIXES", "extract_text_from_file"]
+def extract_text_from_path(path: str | Path) -> str:
+    """从本地文件路径提取纯文本（PBL / 多模态共用）。"""
+    file_path = Path(path)
+    file_bytes = file_path.read_bytes()
+    return extract_text_from_file(file_bytes, file_path.name)
+
+
+__all__ = ["SUPPORTED_SUFFIXES", "extract_text_from_file", "extract_text_from_path"]

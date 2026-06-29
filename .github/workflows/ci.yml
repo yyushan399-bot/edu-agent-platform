@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run unit tests (no LLM)
+        env:
+          PBL_SCORING_TIMES: "1"
+          PBL_CACHE_ENABLED: "false"
+          OPENAI_API_KEY: "test-key-not-used"
+        run: |
+          pytest tests/test_phase5.py tests/test_pbl_platform.py tests/test_primary_indicator.py tests/test_group_project_graph.py::TestGroupProjectGraphHelpers tests/test_section_report_phase0.py tests/test_section_parser.py tests/test_section_graphrag_phase2.py tests/test_section_platform_phase3.py tests/test_summative_phase5.py -v

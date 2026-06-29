@@ -1,21 +1,16 @@
-langchain>=0.3.0
-langchain-openai>=0.2.0
-langchain-community>=0.3.0
-langchain-chroma>=0.2.0
-langchain-huggingface>=0.1.0
-langchain-text-splitters>=0.3.0
-langgraph>=0.2.0
-pydantic>=2.0
-python-dotenv>=1.0.0
-requests>=2.31.0
-beautifulsoup4>=4.12.0
-chromadb>=0.5.0
-openai>=1.12.0
-pymupdf>=1.23.0
-pypdf>=4.0.0
-python-docx>=1.1.0
-paddleocr>=2.7.0
-paddlepaddle>=2.6.0
-sentence-transformers>=3.0.0
-torch>=2.0.0
-pytest>=8.0.0
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+sqlalchemy==2.0.35
+# SQLite 自带，无需额外安装
+# PostgreSQL 用: pip install psycopg2-binary
+psycopg2-binary>=2.9.9
+aiosqlite==0.20.0
+alembic==1.13.2
+python-jose[cryptography]==3.3.0
+bcrypt==4.0.1
+python-multipart==0.0.12
+pydantic==2.9.2
+pydantic-settings==2.5.2
+python-dotenv==1.0.1
+httpx==0.27.2
+openpyxl>=3.1.2

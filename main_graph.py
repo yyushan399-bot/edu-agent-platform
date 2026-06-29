@@ -18,7 +18,7 @@ from agents.save_memory_node import save_memory_node
 from agents.supervisor_agent import supervisor_node
 from agents.synthesis_agent import synthesis_node
 from state import LearningState, ROUTE_TO_NODE, create_initial_state, get_active_routes
-from theory_agent import theory_node
+from agents.theory_agent import theory_node
 
 
 def fan_out_evaluators(state: LearningState) -> list[Send]:

@@ -11,6 +11,7 @@ import llm_config  # noqa: F401
 from llm_config import get_chat_llm
 from rag.practice_rag import retrieve_practice_context
 from agents.context_utils import build_reference_context, get_memory_context
+from rubrics.rubric_prompt_utils import average_sub_scores, clamp_sub_score, format_dimension_rubric_block
 from state import HistoryTurn, LearningState, PracticeNodeUpdate, PracticeResult
 
 
@@ -26,6 +27,9 @@ class PracticeAgentOutput(BaseModel):
     problem_solving: str = Field(
         description="问题解决能力：遇到问题时的分析、排查与解决思路"
     )
+    design_score: int = Field(ge=1, le=5, description="方案设计 1-5 分")
+    operation_score: int = Field(ge=1, le=5, description="操作规范 1-5 分")
+    problem_solving_score: int = Field(ge=1, le=5, description="问题解决 1-5 分")
     feedback: str = Field(description="面向学生的综合形成性评价与改进建议")
     score: int = Field(
         ge=0,
@@ -37,6 +41,8 @@ class PracticeAgentOutput(BaseModel):
 
 
 _parser = PydanticOutputParser(pydantic_object=PracticeAgentOutput)
+
+PRACTICE_RUBRIC_BLOCK = format_dimension_rubric_block("practice")
 
 PRACTICE_PROMPT = ChatPromptTemplate.from_messages(
     [
@@ -53,10 +59,13 @@ PRACTICE_PROMPT = ChatPromptTemplate.from_messages(
             "1. experiment_design（实验设计）：目标、变量、步骤、可行性与创新性\n"
             "2. operation_standard（操作规范）：流程是否清晰、安全、可复现\n"
             "3. problem_solving（问题解决）：问题发现、分析与解决思路\n"
-            "4. feedback：面向学生的综合形成性评价与改进建议，具体可操作\n"
-            "5. score：0-100 整数百分制综合分，须综合以上三项加权得出；"
+            "4. design_score / operation_score / problem_solving_score："
+            "各 1-5 整数，须严格对照下方量规\n"
+            "5. feedback：面向学生的综合形成性评价与改进建议，具体可操作\n"
+            "6. score：0-100 整数百分制综合分，须综合以上三项加权得出；"
             "三项均优秀时可给 85-100，有明显硬伤时应低于 60，并确保与 feedback 语气一致。\n"
-            "若学生使用中文作答，请用中文回复；若使用英文，请用英文回复。\n"
+            + PRACTICE_RUBRIC_BLOCK
+            + "若学生使用中文作答，请用中文回复；若使用英文，请用英文回复。\n"
             "你必须只输出 JSON，不要输出 markdown 代码块或其它说明文字。\n"
             "{format_instructions}",
         ),
@@ -70,17 +79,21 @@ PRACTICE_PROMPT = ChatPromptTemplate.from_messages(
 ).partial(format_instructions=_parser.get_format_instructions())
 
 
-def _clamp_score(value: int | float) -> float:
-    return float(max(0, min(100, round(float(value)))))
-
-
 def _to_practice_result(output: PracticeAgentOutput) -> PracticeResult:
+    subs = [
+        clamp_sub_score(output.design_score),
+        clamp_sub_score(output.operation_score),
+        clamp_sub_score(output.problem_solving_score),
+    ]
     return {
         "experiment_design": str(output.experiment_design),
         "operation_standard": str(output.operation_standard),
         "problem_solving": str(output.problem_solving),
+        "design_score": subs[0],
+        "operation_score": subs[1],
+        "problem_solving_score": subs[2],
         "feedback": str(output.feedback),
-        "score": _clamp_score(output.score),
+        "score": average_sub_scores(subs),
     }
 
 

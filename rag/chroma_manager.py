@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
-from langchain_chroma import Chroma
-from langchain_core.documents import Document
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+if TYPE_CHECKING:
+    from langchain_chroma import Chroma
+    from langchain_core.documents import Document
 
-from rag.embeddings import get_embeddings
 from rag.loaders import SUPPORTED_COLLECTIONS, load_pdf, load_pdfs_from_directory
 
 CollectionName = Literal["theory", "practice", "data"]
@@ -18,6 +17,22 @@ COLLECTIONS: tuple[CollectionName, ...] = ("theory", "practice", "data")
 DEFAULT_PERSIST_DIR = Path(__file__).resolve().parent.parent / "data" / "chroma"
 DEFAULT_CHUNK_SIZE = 500
 DEFAULT_CHUNK_OVERLAP = 50
+
+
+def _get_embeddings():
+    from rag.embeddings import get_embeddings
+
+    return get_embeddings()
+
+
+def _get_text_splitter(*, chunk_size: int, chunk_overlap: int):
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+    return RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        separators=["\n\n", "\n", "。", "！", "？", ". ", " ", ""],
+    )
 
 
 class ChromaManager:
@@ -32,11 +47,10 @@ class ChromaManager:
     ) -> None:
         self.persist_directory = Path(persist_directory or DEFAULT_PERSIST_DIR)
         self.persist_directory.mkdir(parents=True, exist_ok=True)
-        self._embeddings = get_embeddings()
-        self._splitter = RecursiveCharacterTextSplitter(
+        self._embeddings = _get_embeddings()
+        self._splitter = _get_text_splitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
-            separators=["\n\n", "\n", "。", "！", "？", ". ", " ", ""],
         )
         self._stores: dict[str, Chroma] = {}
 
@@ -48,8 +62,10 @@ class ChromaManager:
             )
         return name  # type: ignore[return-value]
 
-    def get_vectorstore(self, collection: str) -> Chroma:
+    def get_vectorstore(self, collection: str) -> "Chroma":
         """获取（或创建）指定 collection 的 Chroma 向量库。"""
+        from langchain_chroma import Chroma
+
         name = self._validate_collection(collection)
         if name not in self._stores:
             self._stores[name] = Chroma(
@@ -62,7 +78,7 @@ class ChromaManager:
     def add_documents(
         self,
         collection: str,
-        documents: list[Document],
+        documents: list["Document"],
         *,
         split: bool = True,
     ) -> list[str]:
@@ -111,7 +127,7 @@ class ChromaManager:
         query: str,
         *,
         k: int = 4,
-    ) -> list[Document]:
+    ) -> list["Document"]:
         """在指定 collection 中做相似度检索。"""
         store = self.get_vectorstore(collection)
         return store.similarity_search(query, k=k)
@@ -122,7 +138,7 @@ class ChromaManager:
         query: str,
         *,
         k: int = 4,
-    ) -> list[tuple[Document, float]]:
+    ) -> list[tuple["Document", float]]:
         """相似度检索并返回分数。"""
         store = self.get_vectorstore(collection)
         return store.similarity_search_with_score(query, k=k)

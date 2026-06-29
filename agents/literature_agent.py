@@ -12,6 +12,7 @@ import llm_config  # noqa: F401
 
 from llm_config import get_chat_llm
 from agents.context_utils import build_reference_context, get_memory_context
+from rubrics.rubric_prompt_utils import average_sub_scores, clamp_sub_score, format_dimension_rubric_block
 from state import HistoryTurn, LearningState, LiteratureNodeUpdate, LiteratureResult
 
 
@@ -30,12 +31,18 @@ class LiteratureAgentOutput(BaseModel):
             "若一致性较差，须在本字段末尾提炼文献的核心问题/论点供学生对照参考"
         )
     )
-    critical_thinking_score: str = Field(
+    critical_thinking_feedback: str = Field(
         description="批判性思维：质疑、比较、证据权衡与局限反思等方面的评价"
     )
-    innovation_score: str = Field(
+    innovation_feedback: str = Field(
         description="创新性：是否提出合理延伸、跨文献联系或独到见解（非凭空臆造）"
     )
+    lit_understanding_score: int = Field(ge=1, le=5, description="文献理解 1-5 分")
+    viewpoint_consistency_score: int = Field(
+        ge=1, le=5, description="观点一致性 1-5 分"
+    )
+    critical_thinking_score: int = Field(ge=1, le=5, description="批判思考 1-5 分")
+    innovation_extension_score: int = Field(ge=1, le=5, description="创新延伸 1-5 分")
     suggestions: str = Field(description="面向学生的综合形成性评价与阅读指导")
     score: int = Field(
         ge=0,
@@ -47,6 +54,8 @@ class LiteratureAgentOutput(BaseModel):
 
 
 _parser = PydanticOutputParser(pydantic_object=LiteratureAgentOutput)
+
+LITERATURE_RUBRIC_BLOCK = format_dimension_rubric_block("literature")
 
 _REFLECTION_LABEL_HINTS = ("用户补充", "阅读心得", "学生心得", "文字")
 _LITERATURE_LABEL_HINTS = ("文档", "第", "页", "pdf", "docx")
@@ -67,12 +76,16 @@ LITERATURE_PROMPT = ChatPromptTemplate.from_messages(
             "2. student_viewpoint：客观总结学生在心得中的核心观点、论据与结论\n"
             "3. alignment_analysis（观点一致性）：分析一致/偏差/误读；"
             "若一致性较差，须在本字段末尾列出 2～4 条「文献核心问题/论点」供学生重新阅读对照\n"
-            "4. critical_thinking_score（批判性思维）：评价质疑、比较、证据权衡与局限反思\n"
-            "5. innovation_score（创新性）：评价合理延伸、跨文献联系或独到见解（非凭空臆造）\n"
-            "6. suggestions：面向学生的综合形成性评价与阅读指导，具体可操作\n"
-            "7. score：0-100 整数百分制综合分，须综合观点一致性、批判性思维、创新性三项加权得出；"
+            "4. critical_thinking_feedback（批判性思维）：评价质疑、比较、证据权衡与局限反思\n"
+            "5. innovation_feedback（创新性）：评价合理延伸、跨文献联系或独到见解（非凭空臆造）\n"
+            "6. lit_understanding_score / viewpoint_consistency_score / "
+            "critical_thinking_score / innovation_extension_score："
+            "各 1-5 整数，须严格对照下方量规\n"
+            "7. suggestions：面向学生的综合形成性评价与阅读指导，具体可操作\n"
+            "8. score：0-100 整数百分制综合分，须综合观点一致性、批判性思维、创新性三项加权得出；"
             "三项均优秀时可给 85-100，有明显误读或硬伤时应低于 60，并确保与 suggestions 语气一致。\n"
-            "若文献原文缺失，请主要依据学生心得评估并明确说明无法对照原文的限制。\n"
+            + LITERATURE_RUBRIC_BLOCK
+            + "若文献原文缺失，请主要依据学生心得评估并明确说明无法对照原文的限制。\n"
             "若学生使用中文作答，请用中文回复；若使用英文，请用英文回复。\n"
             "你必须只输出 JSON，不要输出 markdown 代码块或其它说明文字。\n"
             "{format_instructions}",
@@ -88,19 +101,25 @@ LITERATURE_PROMPT = ChatPromptTemplate.from_messages(
 ).partial(format_instructions=_parser.get_format_instructions())
 
 
-def _clamp_score(value: int | float) -> float:
-    return float(max(0, min(100, round(float(value)))))
-
-
 def _to_literature_result(output: LiteratureAgentOutput) -> LiteratureResult:
+    subs = [
+        clamp_sub_score(output.lit_understanding_score),
+        clamp_sub_score(output.viewpoint_consistency_score),
+        clamp_sub_score(output.critical_thinking_score),
+        clamp_sub_score(output.innovation_extension_score),
+    ]
     return {
         "summary": str(output.summary),
         "student_viewpoint": str(output.student_viewpoint),
         "alignment_analysis": str(output.alignment_analysis),
-        "critical_thinking_score": str(output.critical_thinking_score),
-        "innovation_score": str(output.innovation_score),
+        "critical_thinking_feedback": str(output.critical_thinking_feedback),
+        "innovation_feedback": str(output.innovation_feedback),
+        "lit_understanding_score": subs[0],
+        "viewpoint_consistency_score": subs[1],
+        "critical_thinking_score": subs[2],
+        "innovation_extension_score": subs[3],
         "suggestions": str(output.suggestions),
-        "score": _clamp_score(output.score),
+        "score": average_sub_scores(subs),
     }
 
 

@@ -1,0 +1,35 @@
+你是智能学伴系统的全栈开发助手。
+
+## 项目概述
+教育智能体评价系统，同济大学教育技术学项目。
+
+## 目录结构
+- `backend/` — FastAPI 后端（Python 3.14 + SQLAlchemy）
+- `frontend/` — React SPA（React 19 + TypeScript + Tailwind CSS v4）
+
+## 关键信息
+- 后端端口：8391
+- 前端端口：5173（Vite 代理 /api → 后端）
+- 数据库：SQLite（`agent_system.db`），改 `.env` 的 `DATABASE_URL` 可切 PostgreSQL
+- 认证：JWT + bcrypt（`Bearer Token`）
+- 所有 API 封装在 `frontend/src/api/client.ts`
+- 认证上下文在 `frontend/src/api/auth.tsx`
+- 路由守卫在 `frontend/src/components/ProtectedRoute.tsx`
+
+## 角色与路由
+| 角色 | 路由 | 页面 |
+|------|------|------|
+| teacher | /teacher | TeacherDashboard |
+| admin | /admin | AdminDashboard |
+| group_leader | /leader | LeaderDashboard |
+| group_member | /member | MemberDashboard |
+
+## 待完成优先级
+1. 写 backend/seed.py 数据初始化脚本
+2. 各页面接入真实 API（目前部分为 Mock 数据）
+3. 评估结果展示页
+4. 用户体验改进（Toast、Loading）
+
+## 风格参考
+前端风格参考文件在：
+D:\wechat\chat data\xwechat_files\wxid_khek11ihsw7822_14cd\msg\file\2026-06\前端汇总(1)\前端汇总\
